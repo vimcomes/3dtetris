@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <random>
 #include <set>
@@ -21,6 +22,18 @@
 
 namespace
 {
+Vec3i rotate_block_app(const Vec3i& v, Axis axis, int dir)
+{
+    int r = (dir >= 0) ? 1 : -1;
+    switch (axis)
+    {
+    case Axis::X: return Vec3i{v.x, r * v.z * -1, r * v.y};
+    case Axis::Y: return Vec3i{r * v.z, v.y, r * -v.x};
+    case Axis::Z: return Vec3i{r * -v.y, r * v.x, v.z};
+    }
+    return v;
+}
+
 struct GlMesh
 {
     GLuint vao = 0;
@@ -444,6 +457,12 @@ int main()
         float timer = 0.f;
         int steps = 0;
         std::mt19937 rng{12345};
+        struct Plan
+        {
+            bool has_plan = false;
+            std::vector<std::function<void()>> actions;
+            size_t idx = 0;
+        } plan;
     } auto_play;
 
     std::cout << "Controls:\n"
@@ -653,31 +672,97 @@ int main()
         fall_offset = game.fall_progress() * cell_size;
     }
 
-    // Auto-play simple random mover/rotator with periodic drops.
+    // Auto-play heuristic: pick best placement among rotations/moves.
     if (auto_play.enabled && game.active_piece())
     {
         auto_play.timer += dt;
-        if (auto_play.timer >= 0.12f)
+        if (!auto_play.plan.has_plan || auto_play.plan.idx >= auto_play.plan.actions.size())
         {
-            auto_play.timer = 0.f;
-            auto_play.steps++;
-            std::uniform_int_distribution<int> dist(0, 7);
-            int act = dist(auto_play.rng);
-            if (act == 0) game.rotate_active(Axis::X, 1);
-            else if (act == 1) game.rotate_active(Axis::Y, 1);
-            else if (act == 2) game.rotate_active(Axis::Z, 1);
-            else if (act == 3) game.rotate_active(Axis::X, -1);
-            else if (act == 4) game.move_active(-1, 0);
-            else if (act == 5) game.move_active(1, 0);
-            else if (act == 6) game.move_active(0, -1);
-            else game.move_active(0, 1);
-
-            if (auto_play.steps >= 8)
+            auto_play.plan = {};
+            if (const auto& p = game.active_piece())
             {
-                game.hard_drop();
-                auto_play.steps = 0;
-                spin.active = false;
-                spin_angle = 0.0f;
+                // Simple heuristic: minimize max height and holes.
+                struct Candidate { std::vector<Vec3i> blocks; Vec3i pos; int rot_x; int rot_y; int rot_z; float score; };
+                std::vector<Candidate> cands;
+                auto active_blocks = p->blocks;
+                // Generate rotations (limited set to keep simple).
+                std::vector<std::array<int, 3>> rotations = {{0,0,0},{1,0,0},{0,1,0},{0,0,1},{-1,0,0},{0,-1,0},{0,0,-1}};
+                for (auto rot : rotations)
+                {
+                    std::vector<Vec3i> rb = active_blocks;
+                    for (auto& b : rb)
+                    {
+                        b = rotate_block_app(b, Axis::X, rot[0]);
+                        b = rotate_block_app(b, Axis::Y, rot[1]);
+                        b = rotate_block_app(b, Axis::Z, rot[2]);
+                    }
+                    // Bounding box width/depth after rotation.
+                    int minx=0,maxx=0,minz=0,maxz=0;
+                    for (auto& b: rb){minx=std::min(minx,b.x);maxx=std::max(maxx,b.x);minz=std::min(minz,b.z);maxz=std::max(maxz,b.z);}
+                    for (int x = 0; x < game.well().width(); ++x)
+                    {
+                        for (int z = 0; z < game.well().depth(); ++z)
+                        {
+                            Piece test = *p;
+                            test.blocks = rb;
+                            test.pos = Vec3i{x - minx, game.well().height()-1, z - minz};
+                            // Drop down.
+                            while (true)
+                            {
+                                Piece step = test;
+                                step.pos.y -= 1;
+                                if (game.can_place_public(step))
+                                {
+                                    test = step;
+                                }
+                                else break;
+                            }
+                            if (!game.can_place_public(test)) continue;
+                            // Score: lower height and fewer overlaps in same column.
+                            int max_h = 0;
+                            for (auto& b : test.blocks)
+                            {
+                                int h = test.pos.y + b.y;
+                                max_h = std::max(max_h, h);
+                            }
+                            float score = static_cast<float>(max_h);
+                            cands.push_back({rb, test.pos, rot[0], rot[1], rot[2], score});
+                        }
+                    }
+                }
+                if (!cands.empty())
+                {
+                    auto best = *std::min_element(cands.begin(), cands.end(), [](const Candidate& a, const Candidate& b){return a.score < b.score;});
+                    std::vector<std::function<void()>> plan;
+                    // Apply rotations
+                    if (best.rot_x != 0) plan.push_back([&game](){game.rotate_active(Axis::X, 1);});
+                    if (best.rot_y != 0) plan.push_back([&game](){game.rotate_active(Axis::Y, 1);});
+                    if (best.rot_z != 0) plan.push_back([&game](){game.rotate_active(Axis::Z, 1);});
+                    // Move to target x/z
+                    if (const auto& cur = game.active_piece())
+                    {
+                        int dx = best.pos.x - cur->pos.x;
+                        int dz = best.pos.z - cur->pos.z;
+                        int step_x = (dx > 0) ? 1 : -1;
+                        for (int i = 0; i < std::abs(dx); ++i) plan.push_back([&game, step_x](){game.move_active(step_x, 0);});
+                        int step_z = (dz > 0) ? 1 : -1;
+                        for (int i = 0; i < std::abs(dz); ++i) plan.push_back([&game, step_z](){game.move_active(0, step_z);});
+                    }
+                    // Drop
+                    plan.push_back([&game](){game.hard_drop();});
+                    auto_play.plan.actions = std::move(plan);
+                    auto_play.plan.has_plan = true;
+                    auto_play.plan.idx = 0;
+                }
+            }
+        }
+        if (auto_play.plan.has_plan && auto_play.plan.idx < auto_play.plan.actions.size())
+        {
+            auto_play.timer += dt;
+            if (auto_play.timer >= 0.08f)
+            {
+                auto_play.timer = 0.f;
+                auto_play.plan.actions[auto_play.plan.idx++]();
             }
         }
     }

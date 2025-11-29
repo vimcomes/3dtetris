@@ -66,6 +66,7 @@ public:
     void debug_fill_plane(int y, const Vec3& color);
     void rebuild_locked_cache();
     [[nodiscard]] std::vector<int> filled_planes() const;
+    bool can_place_public(const Piece& p) const { return can_place(p); }
 
     const Well& well() const { return well_; }
     const std::optional<Piece>& active_piece() const { return active_; }
