@@ -16,24 +16,13 @@
 #include "backends/imgui_impl_opengl3.h"
 
 #include "game.h"
+#include "game_ai.h"
 #include "geometry.h"
 #include "math.h"
 #include "shader.h"
 
 namespace
 {
-Vec3i rotate_block_app(const Vec3i& v, Axis axis, int dir)
-{
-    int r = (dir >= 0) ? 1 : -1;
-    switch (axis)
-    {
-    case Axis::X: return Vec3i{v.x, r * v.z * -1, r * v.y};
-    case Axis::Y: return Vec3i{r * v.z, v.y, r * -v.x};
-    case Axis::Z: return Vec3i{r * -v.y, r * v.x, v.z};
-    }
-    return v;
-}
-
 struct GlMesh
 {
     GLuint vao = 0;
@@ -454,15 +443,10 @@ int main()
     struct AutoPlay
     {
         bool enabled = false;
-        float timer = 0.f;
+        float step_timer = 0.f;
         int steps = 0;
-        std::mt19937 rng{12345};
-        struct Plan
-        {
-            bool has_plan = false;
-            std::vector<std::function<void()>> actions;
-            size_t idx = 0;
-        } plan;
+        std::vector<AiPlanStep> plan;
+        size_t plan_idx = 0;
     } auto_play;
 
     std::cout << "Controls:\n"
@@ -672,155 +656,40 @@ int main()
         fall_offset = game.fall_progress() * cell_size;
     }
 
-    // Auto-play heuristic: pick best placement among rotations/moves.
     if (auto_play.enabled && game.active_piece())
     {
-        auto_play.timer += dt;
-        if (!auto_play.plan.has_plan || auto_play.plan.idx >= auto_play.plan.actions.size())
+        auto_play.step_timer += dt;
+        if (auto_play.plan.empty())
         {
-            auto_play.plan = {};
-            if (const auto& p = game.active_piece())
-            {
-                // Heuristic: minimize height/holes, maximize filled planes.
-                struct Candidate { std::vector<Vec3i> blocks; Vec3i pos; int rot_x; int rot_y; int rot_z; float score; int clears; };
-                std::vector<Candidate> cands;
-                auto active_blocks = p->blocks;
-                // Generate rotations (limited set to keep simple).
-                std::vector<std::array<int, 3>> rotations = {{0,0,0},{1,0,0},{0,1,0},{0,0,1},{-1,0,0},{0,-1,0},{0,0,-1}};
-                for (auto rot : rotations)
-                {
-                    std::vector<Vec3i> rb = active_blocks;
-                    for (auto& b : rb)
-                    {
-                        b = rotate_block_app(b, Axis::X, rot[0]);
-                        b = rotate_block_app(b, Axis::Y, rot[1]);
-                        b = rotate_block_app(b, Axis::Z, rot[2]);
-                    }
-                    // Bounding box width/depth after rotation.
-                    int minx=0,maxx=0,minz=0,maxz=0;
-                    for (auto& b: rb){minx=std::min(minx,b.x);maxx=std::max(maxx,b.x);minz=std::min(minz,b.z);maxz=std::max(maxz,b.z);}
-                    for (int x = 0; x < game.well().width(); ++x)
-                    {
-                        for (int z = 0; z < game.well().depth(); ++z)
-                        {
-                            Piece test = *p;
-                            test.blocks = rb;
-                            test.pos = Vec3i{x - minx, game.well().height()-1, z - minz};
-                            // Drop down.
-                            while (true)
-                            {
-                                Piece step = test;
-                                step.pos.y -= 1;
-                                if (game.can_place_public(step))
-                                {
-                                    test = step;
-                                }
-                                else break;
-                            }
-                            if (!game.can_place_public(test)) continue;
-                            // Evaluate placement.
-                            int w = game.well().width();
-                            int d = game.well().depth();
-                            int h = game.well().height();
-                            std::vector<uint8_t> occ(w * d * h, 0);
-                            auto idx3 = [&](int x, int y, int z){ return y * d * w + z * w + x; };
-                            const auto& cells = game.well().cells();
-                            for (int yy = 0; yy < h; ++yy)
-                            {
-                                for (int zz = 0; zz < d; ++zz)
-                                {
-                                    for (int xx = 0; xx < w; ++xx)
-                                    {
-                                        if (!game.well().is_free(Vec3i{xx, yy, zz}))
-                                        {
-                                            occ[idx3(xx, yy, zz)] = 1;
-                                        }
-                                    }
-                                }
-                            }
-                            for (auto b : test.blocks)
-                            {
-                                int xx = test.pos.x + b.x;
-                                int yy = test.pos.y + b.y;
-                                int zz = test.pos.z + b.z;
-                                if (xx >=0 && xx < w && yy >=0 && yy < h && zz >=0 && zz < d)
-                                    occ[idx3(xx, yy, zz)] = 1;
-                            }
-                            // Full planes count.
-                            int full_planes = 0;
-                            for (int yy = 0; yy < h; ++yy)
-                            {
-                                bool full = true;
-                                for (int zz = 0; zz < d && full; ++zz)
-                                    for (int xx = 0; xx < w; ++xx)
-                                        if (!occ[idx3(xx, yy, zz)]) { full = false; break; }
-                                if (full) full_planes++;
-                            }
-                            // Holes per column.
-                            int holes = 0;
-                            int max_h = 0;
-                            for (int zz = 0; zz < d; ++zz)
-                            {
-                                for (int xx = 0; xx < w; ++xx)
-                                {
-                                    bool filled_seen = false;
-                                    for (int yy = h - 1; yy >= 0; --yy)
-                                    {
-                                        if (occ[idx3(xx, yy, zz)])
-                                        {
-                                            filled_seen = true;
-                                            max_h = std::max(max_h, yy);
-                                        }
-                                        else if (filled_seen)
-                                        {
-                                            holes++;
-                                        }
-                                    }
-                                }
-                            }
-                            float score = max_h * 10.0f + holes * 30.0f - full_planes * 200.0f;
-                            cands.push_back({rb, test.pos, rot[0], rot[1], rot[2], score, full_planes});
-                        }
-                    }
-                }
-                if (!cands.empty())
-                {
-                    auto best = *std::min_element(cands.begin(), cands.end(), [](const Candidate& a, const Candidate& b){return a.score < b.score;});
-                    std::vector<std::function<void()>> plan;
-                    // Apply rotations with correct sign (limited to -1/0/1).
-                    if (best.rot_x != 0) plan.push_back([&game, rx=best.rot_x](){game.rotate_active(Axis::X, rx);});
-                    if (best.rot_y != 0) plan.push_back([&game, ry=best.rot_y](){game.rotate_active(Axis::Y, ry);});
-                    if (best.rot_z != 0) plan.push_back([&game, rz=best.rot_z](){game.rotate_active(Axis::Z, rz);});
-                    // Move to target x/z
-                    if (const auto& cur = game.active_piece())
-                    {
-                        int dx = best.pos.x - cur->pos.x;
-                        int dz = best.pos.z - cur->pos.z;
-                        int step_x = (dx > 0) ? 1 : -1;
-                        for (int i = 0; i < std::abs(dx); ++i) plan.push_back([&game, step_x](){game.move_active(step_x, 0);});
-                        int step_z = (dz > 0) ? 1 : -1;
-                        for (int i = 0; i < std::abs(dz); ++i) plan.push_back([&game, step_z](){game.move_active(0, step_z);});
-                    }
-                    // Drop
-                    plan.push_back([&game](){game.hard_drop();});
-                    auto_play.plan.actions = std::move(plan);
-                    auto_play.plan.has_plan = true;
-                    auto_play.plan.idx = 0;
-                }
-            }
+            GameAi ai;
+            auto_play.plan = ai.compute_plan(game);
+            auto_play.plan_idx = 0;
+            auto_play.steps = 0;
         }
-        if (auto_play.plan.has_plan && auto_play.plan.idx < auto_play.plan.actions.size())
+        if (!auto_play.plan.empty() && auto_play.plan_idx < auto_play.plan.size() && auto_play.step_timer >= 0.18f)
         {
-            auto_play.timer += dt;
-            if (auto_play.timer >= 0.08f)
+            auto_play.step_timer = 0.f;
+            const auto& act = auto_play.plan[auto_play.plan_idx++];
+            switch (act.type)
             {
-                auto_play.timer = 0.f;
-                auto_play.plan.actions[auto_play.plan.idx++]();
+            case AiPlanStep::Type::RotX: game.rotate_active(Axis::X, act.value); break;
+            case AiPlanStep::Type::RotY: game.rotate_active(Axis::Y, act.value); break;
+            case AiPlanStep::Type::RotZ: game.rotate_active(Axis::Z, act.value); break;
+            case AiPlanStep::Type::MoveX: game.move_active(act.value, 0); break;
+            case AiPlanStep::Type::MoveZ: game.move_active(0, act.value); break;
+            case AiPlanStep::Type::Drop:
+                game.hard_drop();
+                spin.active = false;
+                spin_angle = 0.0f;
+                auto_play.plan.clear();
+                auto_play.plan_idx = 0;
+                break;
             }
+            auto_play.steps++;
         }
     }
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         ImGuiWindowFlags viewport_flags = ImGuiWindowFlags_NoDecoration |
                                           ImGuiWindowFlags_NoMove |
                                           ImGuiWindowFlags_NoScrollbar |
