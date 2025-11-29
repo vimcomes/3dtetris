@@ -73,7 +73,10 @@ Game::Game(int w, int d, int h) : well_(w, d, h)
         // I
         {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{2, 0, 0}},
         // O
-        {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}},
+        {
+            Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1},
+            Vec3i{0, 1, 0}, Vec3i{1, 1, 0}, Vec3i{0, 1, 1}, Vec3i{1, 1, 1},
+        },
         // T
         {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}},
         // L
@@ -109,7 +112,14 @@ Piece Game::spawn_piece()
     p.shape = shape;
     p.blocks = shapes_[shape];
     p.color = shape_colors_[shape];
-    p.pos = Vec3i{well_.width() / 2, well_.height() - 1, well_.depth() / 2};
+    int max_y = 0;
+    for (const auto& b : p.blocks)
+    {
+        if (b.y > max_y) max_y = b.y;
+    }
+    int start_y = well_.height() - 1 - max_y;
+    if (start_y < 0) start_y = 0;
+    p.pos = Vec3i{well_.width() / 2, start_y, well_.depth() / 2};
     return p;
 }
 
