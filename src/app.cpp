@@ -999,6 +999,14 @@ int main()
             ImGui::BulletText("Space: hard drop");
             ImGui::BulletText("F: toggle wireframe");
             ImGui::BulletText("Esc: quit");
+            ImGui::Separator();
+            ImGui::TextUnformatted("Debug");
+            if (ImGui::Button("AI fill bottom & clear"))
+            {
+                game.debug_fill_plane(0, Vec3{0.9f, 0.9f, 0.9f});
+                game.clear_full_planes();
+                game.rebuild_locked_cache();
+            }
         }
         ImGui::End();
 
