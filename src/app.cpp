@@ -917,11 +917,14 @@ int main()
 
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, p->color, 0.95f);
+                        draw_mesh(active_edges, model, p->color, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.6f);
+                        Vec3 iso_tint{std::min(p->color.x * 1.1f + 0.05f, 1.0f),
+                                      std::min(p->color.y * 1.1f + 0.05f, 1.0f),
+                                      std::min(p->color.z * 1.1f + 0.05f, 1.0f)};
+                        draw_mesh(active_mesh, model, iso_tint, 1.0f);
                     }
                 }
                 // Locked cells.
@@ -939,6 +942,21 @@ int main()
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
+                // Edge overlay for locked cells to distinguish blocks.
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                glLineWidth(1.2f);
+                for (size_t i = 0; i < locked_positions.size(); ++i)
+                {
+                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                    Mat4 model = translation(world);
+                    Mat4 mvp = multiply(mvp_world, model);
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, 0.92f, 0.95f, 0.98f);
+                    glUniform1f(u_alpha_loc, 1.0f);
+                    glBindVertexArray(cube_mesh.vao);
+                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                }
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
                 glBindVertexArray(0);
                 glDisable(GL_SCISSOR_TEST);
