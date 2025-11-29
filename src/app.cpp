@@ -436,7 +436,6 @@ int main()
     double last_mouse_y = 0.0;
     bool dock_built = false;
     struct ViewportRect { float x0 = 0.f, y0 = 0.f, x1 = static_cast<float>(start_width), y1 = static_cast<float>(start_height); } viewport_rect;
-    bool viewport_hovered = false;
 
     std::cout << "Controls:\n"
                  "  Mouse drag: rotate view around vertical axis\n"
@@ -486,7 +485,7 @@ int main()
         double mx = 0.0, my = 0.0;
         glfwGetCursorPos(window, &mx, &my);
         bool in_viewport = mx >= viewport_rect.x0 && mx <= viewport_rect.x1 && my >= viewport_rect.y0 && my <= viewport_rect.y1;
-        if (!io.WantCaptureMouse && in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             if (!rotating)
             {
@@ -504,7 +503,7 @@ int main()
             rotating = false;
         }
 
-        if (!io.WantCaptureMouse && in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
         {
             if (!rmb.down)
             {
@@ -625,7 +624,8 @@ int main()
                                           ImGuiWindowFlags_NoMove |
                                           ImGuiWindowFlags_NoScrollbar |
                                           ImGuiWindowFlags_NoScrollWithMouse |
-                                          ImGuiWindowFlags_NoBackground;
+                                          ImGuiWindowFlags_NoBackground |
+                                          ImGuiWindowFlags_NoInputs;
         if (ImGui::Begin("Viewport", nullptr, viewport_flags))
         {
             ImVec2 content_min = ImGui::GetWindowContentRegionMin();
@@ -634,7 +634,6 @@ int main()
             ImVec2 viewport_pos{window_pos.x + content_min.x, window_pos.y + content_min.y};
             ImVec2 viewport_size{content_max.x - content_min.x, content_max.y - content_min.y};
             viewport_rect = {viewport_pos.x, viewport_pos.y, viewport_pos.x + viewport_size.x, viewport_pos.y + viewport_size.y};
-            viewport_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
 
             if (viewport_size.x > 0.f && viewport_size.y > 0.f)
             {
