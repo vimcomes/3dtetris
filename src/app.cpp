@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <random>
 #include <set>
 #include <string>
 #include <vector>
@@ -437,6 +438,14 @@ int main()
     bool dock_built = false;
     struct ViewportRect { float x0 = 0.f, y0 = 0.f, x1 = static_cast<float>(start_width), y1 = static_cast<float>(start_height); } viewport_rect;
 
+    struct AutoPlay
+    {
+        bool enabled = false;
+        float timer = 0.f;
+        int steps = 0;
+        std::mt19937 rng{12345};
+    } auto_play;
+
     std::cout << "Controls:\n"
                  "  Mouse drag: rotate view around vertical axis\n"
                  "  W/S: tilt camera\n"
@@ -609,11 +618,11 @@ int main()
             handle_repeat(is_down(GLFW_KEY_K) && in_viewport, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
-        if (!io.WantCaptureKeyboard && space_now && !prev_keys.space)
-        {
-            game.hard_drop();
-            spin.active = false;
-        }
+    if (!io.WantCaptureKeyboard && space_now && !prev_keys.space)
+    {
+        game.hard_drop();
+        spin.active = false;
+    }
         if (!io.WantCaptureKeyboard && in_viewport && f_now && !prev_keys.f)
         {
             wireframe_active = !wireframe_active;
@@ -642,6 +651,35 @@ int main()
     if (game.active_can_fall())
     {
         fall_offset = game.fall_progress() * cell_size;
+    }
+
+    // Auto-play simple random mover/rotator with periodic drops.
+    if (auto_play.enabled && game.active_piece())
+    {
+        auto_play.timer += dt;
+        if (auto_play.timer >= 0.12f)
+        {
+            auto_play.timer = 0.f;
+            auto_play.steps++;
+            std::uniform_int_distribution<int> dist(0, 7);
+            int act = dist(auto_play.rng);
+            if (act == 0) game.rotate_active(Axis::X, 1);
+            else if (act == 1) game.rotate_active(Axis::Y, 1);
+            else if (act == 2) game.rotate_active(Axis::Z, 1);
+            else if (act == 3) game.rotate_active(Axis::X, -1);
+            else if (act == 4) game.move_active(-1, 0);
+            else if (act == 5) game.move_active(1, 0);
+            else if (act == 6) game.move_active(0, -1);
+            else game.move_active(0, 1);
+
+            if (auto_play.steps >= 8)
+            {
+                game.hard_drop();
+                auto_play.steps = 0;
+                spin.active = false;
+                spin_angle = 0.0f;
+            }
+        }
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
@@ -1054,27 +1092,8 @@ int main()
             ImGui::BulletText("F: toggle wireframe");
             ImGui::BulletText("Esc: quit");
             ImGui::Separator();
-            ImGui::TextUnformatted("Debug");
-            if (ImGui::Button("Fill bottom layer"))
-            {
-                game.debug_fill_plane(0, Vec3{0.9f, 0.9f, 0.9f});
-            }
-            ImGui::SameLine();
-            static int cleared_last = 0;
-            if (ImGui::Button("Clear full planes"))
-            {
-                cleared_last = game.clear_full_planes();
-                game.rebuild_locked_cache();
-            }
-            ImGui::SameLine();
-            ImGui::Text("cleared: %d", cleared_last);
-            auto filled = game.filled_planes();
-            ImGui::Text("filled layers: %s", filled.empty() ? "none" : "");
-            for (int y : filled)
-            {
-                ImGui::SameLine();
-                ImGui::Text("[%d]", y);
-            }
+            ImGui::Checkbox("Auto play", &auto_play.enabled);
+            ImGui::Text("Auto steps: %d", auto_play.steps);
         }
         ImGui::End();
 
