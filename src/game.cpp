@@ -86,15 +86,15 @@ Game::Game(int w, int d, int h) : well_(w, d, h)
         {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}},
     };
 
-    // Vibrant palette: cyan, yellow, magenta, orange, blue, green, red.
+    // Saturated palette: cyan, yellow, magenta, orange, blue, green, red.
     shape_colors_ = {
-        Vec3{0.18f, 0.82f, 1.0f},
-        Vec3{1.0f, 0.9f, 0.1f},
-        Vec3{1.0f, 0.3f, 0.85f},
-        Vec3{1.0f, 0.55f, 0.15f},
-        Vec3{0.25f, 0.55f, 1.0f},
-        Vec3{0.25f, 0.95f, 0.45f},
-        Vec3{0.95f, 0.22f, 0.22f},
+        Vec3{0.0f, 1.0f, 1.0f},
+        Vec3{1.0f, 1.0f, 0.0f},
+        Vec3{1.0f, 0.0f, 1.0f},
+        Vec3{1.0f, 0.55f, 0.0f},
+        Vec3{0.1f, 0.45f, 1.0f},
+        Vec3{0.0f, 1.0f, 0.55f},
+        Vec3{1.0f, 0.0f, 0.0f},
     };
 
     rng_.seed(std::random_device{}());

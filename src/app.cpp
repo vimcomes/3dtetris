@@ -422,7 +422,7 @@ int main()
 
     bool wireframe_active = false;
     float brightness = 1.2f;
-    float color_boost = 1.2f;
+    float color_boost = 1.6f;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -760,8 +760,8 @@ int main()
         {
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
-            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::SliderFloat("Color boost", &color_boost, 0.8f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Color boost", &color_boost, 0.8f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
