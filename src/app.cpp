@@ -839,7 +839,7 @@ int main()
         draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 0.85f);
 
         // Checkbox.
-        std::vector<float> checkbox = build_checkbox_lines(panel_left + 0.03f, panel_top - 0.03f, 0.06f, wireframe_active);
+        std::vector<float> checkbox = build_checkbox_lines(panel_left + 0.03f, panel_top - 0.03f, 0.05f, wireframe_active);
         update_mesh(active_mesh, checkbox);
         draw_mesh_mvp(active_mesh, identity(), wireframe_active ? Vec3{0.2f, 0.9f, 0.4f} : Vec3{0.7f, 0.7f, 0.7f}, 1.0f);
 
@@ -853,7 +853,7 @@ int main()
             "Q/E: ZOOM\n"
             "W/S: TILT\n"
             "ESC: QUIT";
-        auto text_mesh = build_text_quads(text, panel_left + 0.1f, panel_top - 0.05f, 0.025f, Vec3{0.8f, 0.85f, 0.9f});
+        auto text_mesh = build_text_quads(text, panel_left + 0.1f, panel_top - 0.07f, 0.015f, Vec3{0.8f, 0.85f, 0.9f});
         update_mesh(active_mesh, text_mesh);
         draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
 
