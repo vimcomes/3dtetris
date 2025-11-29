@@ -470,7 +470,11 @@ int main()
             ImGuiID right_id = 0;
             ImGuiID left_id = dockspace_id;
             ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.32f, &right_id, &left_id);
-            ImGui::DockBuilderDockWindow("Controls", right_id);
+            ImGuiID right_bottom = 0;
+            ImGuiID right_top = right_id;
+            ImGui::DockBuilderSplitNode(right_id, ImGuiDir_Down, 0.35f, &right_bottom, &right_top);
+            ImGui::DockBuilderDockWindow("Controls", right_top);
+            ImGui::DockBuilderDockWindow("Iso View", right_bottom);
             ImGui::DockBuilderDockWindow("Viewport", left_id);
             ImGui::DockBuilderFinish(dockspace_id);
             dock_built = true;
@@ -615,11 +619,32 @@ int main()
             wireframe_active = !wireframe_active;
         }
 
-        prev_keys = {left_now, right_now, up_now, down_now, z_now, x_now, space_now, f_now};
+    prev_keys = {left_now, right_now, up_now, down_now, z_now, x_now, space_now, f_now};
 
-        game.update(dt);
+    game.update(dt);
+    if (spin.active)
+    {
+        spin.t += dt;
+        if (spin.t >= spin.duration)
+        {
+            spin.active = false;
+        }
+    }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+    float spin_angle = 0.0f;
+    if (spin.active)
+    {
+        float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
+        float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
+        spin_angle = remaining * -sign * to_radians(90.0f);
+    }
+    float fall_offset = 0.0f;
+    if (game.active_can_fall())
+    {
+        fall_offset = game.fall_progress() * cell_size;
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         ImGuiWindowFlags viewport_flags = ImGuiWindowFlags_NoDecoration |
                                           ImGuiWindowFlags_NoMove |
                                           ImGuiWindowFlags_NoScrollbar |
@@ -727,32 +752,18 @@ int main()
                     pivot.y *= inv;
                     pivot.z *= inv;
 
-                    float spin_angle = 0.0f;
-                    if (spin.active)
-                    {
-                        float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
-                        float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
-                        spin_angle = remaining * -sign * to_radians(90.0f);
-                    }
-
-                    float fall_offset = 0.0f;
-                    if (game.active_can_fall())
-                    {
-                        fall_offset = game.fall_progress() * cell_size;
-                    }
-
                     auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
                     auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
                     update_mesh(active_mesh, piece_vertices);
                     update_mesh(active_edges, edge_vertices);
 
                     Mat4 model = translation(pivot);
-                    if (spin.active && spin_angle != 0.0f)
-                    {
-                        if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
-                        else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
-                        else model = multiply(model, rotation_z(spin_angle));
-                    }
+                        if (spin_angle != 0.0f)
+                        {
+                            if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
+                            else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
+                            else model = multiply(model, rotation_z(spin_angle));
+                        }
                     model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
                     if (fall_offset > 0.0f)
                     {
@@ -870,6 +881,135 @@ int main()
         }
         ImGui::End();
         ImGui::PopStyleVar();
+
+        // Separate isometric view under the controls column.
+        ImGuiWindowFlags iso_flags = ImGuiWindowFlags_NoDecoration |
+                                     ImGuiWindowFlags_NoMove |
+                                     ImGuiWindowFlags_NoScrollbar |
+                                     ImGuiWindowFlags_NoScrollWithMouse |
+                                     ImGuiWindowFlags_NoBackground;
+        if (ImGui::Begin("Iso View", nullptr, iso_flags))
+        {
+            ImVec2 content_min = ImGui::GetWindowContentRegionMin();
+            ImVec2 content_max = ImGui::GetWindowContentRegionMax();
+            ImVec2 window_pos = ImGui::GetWindowPos();
+            ImVec2 iso_pos{window_pos.x + content_min.x, window_pos.y + content_min.y};
+            ImVec2 iso_size{content_max.x - content_min.x, content_max.y - content_min.y};
+            if (iso_size.x > 0.f && iso_size.y > 0.f)
+            {
+                int fb_width = 1;
+                int fb_height = 1;
+                glfwGetFramebufferSize(window, &fb_width, &fb_height);
+                ImVec2 fb_scale = io.DisplayFramebufferScale;
+                int vx = static_cast<int>(iso_pos.x * fb_scale.x);
+                int vy = static_cast<int>((io.DisplaySize.y - iso_pos.y - iso_size.y) * fb_scale.y);
+                int vw = static_cast<int>(iso_size.x * fb_scale.x);
+                int vh = static_cast<int>(iso_size.y * fb_scale.y);
+
+                glViewport(vx, vy, vw, vh);
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(vx, vy, vw, vh);
+                auto apply_tone = [&](const Vec3& c)
+                {
+                    float gain = std::max(brightness * color_boost, 0.1f);
+                    Vec3 v{c.x * gain, c.y * gain, c.z * gain};
+                    float maxc = std::max(v.x, std::max(v.y, v.z));
+                    if (maxc > 1.0f)
+                    {
+                        float inv = 1.0f / maxc;
+                        v.x *= inv;
+                        v.y *= inv;
+                        v.z *= inv;
+                    }
+                    return v;
+                };
+                Vec3 clear{0.12f, 0.14f, 0.18f};
+                glClearColor(clear.x, clear.y, clear.z, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                float yaw_iso = to_radians(45.0f);
+                float pitch_iso = to_radians(65.0f);
+                float dist_iso = 28.0f;
+                float cy = std::cos(yaw_iso);
+                float sy = std::sin(yaw_iso);
+                float cp = std::cos(pitch_iso);
+                float sp = std::sin(pitch_iso);
+                Vec3 eye{dist_iso * sy * cp, dist_iso * sp, dist_iso * cy * cp};
+                Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                float aspect = iso_size.x / iso_size.y;
+                Mat4 proj = perspective(55.0f, aspect, 0.1f, 120.0f);
+                Mat4 mvp_world = multiply(proj, view);
+
+                glUseProgram(program);
+                auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
+                {
+                    Vec3 t = apply_tone(tint);
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
+                    glUniform1f(u_alpha_loc, alpha);
+                    glBindVertexArray(mesh.vao);
+                    glDrawArrays(mesh.mode, 0, mesh.count);
+                };
+                auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
+                {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    draw_mesh_mvp(mesh, mvp, tint, alpha);
+                };
+
+                draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+
+                if (const auto& p = game.active_piece())
+                {
+                    auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
+                    auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
+                    update_mesh(active_mesh, piece_vertices);
+                    update_mesh(active_edges, edge_vertices);
+
+                    Mat4 model = identity();
+                    if (spin_angle != 0.0f)
+                    {
+                        if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
+                        else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
+                        else model = multiply(model, rotation_z(spin_angle));
+                    }
+                    if (fall_offset > 0.0f)
+                    {
+                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
+                    }
+
+                    if (wireframe_active)
+                    {
+                        draw_mesh(active_edges, model, p->color, 0.95f);
+                    }
+                    else
+                    {
+                        draw_mesh(active_mesh, model, p->color, 0.6f);
+                    }
+                }
+
+                // Locked cells.
+                const auto& locked_positions = game.locked_cells();
+                const auto& locked_colors = game.locked_colors();
+                for (size_t i = 0; i < locked_positions.size(); ++i)
+                {
+                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                    Mat4 model = translation(world);
+                    Mat4 mvp = multiply(mvp_world, model);
+                    Vec3 t = apply_tone(locked_colors[i]);
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
+                    glUniform1f(u_alpha_loc, 1.0f);
+                    glBindVertexArray(cube_mesh.vao);
+                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                }
+
+                glBindVertexArray(0);
+                glDisable(GL_SCISSOR_TEST);
+            }
+        }
+        ImGui::End();
 
         if (ImGui::Begin("Controls"))
         {
