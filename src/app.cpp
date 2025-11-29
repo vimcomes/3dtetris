@@ -809,6 +809,21 @@ int main()
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
+                // Outline pass to accentuate locked blocks.
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                glLineWidth(1.3f);
+                for (size_t i = 0; i < locked_positions.size(); ++i)
+                {
+                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                    Mat4 model = translation(world);
+                    Mat4 mvp = multiply(mvp_world, model);
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, 0.92f, 0.95f, 0.98f);
+                    glUniform1f(u_alpha_loc, 1.0f);
+                    glBindVertexArray(cube_mesh.vao);
+                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                }
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
                 glBindVertexArray(0);
                 glDisable(GL_SCISSOR_TEST);
