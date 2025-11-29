@@ -1081,12 +1081,12 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::SliderFloat("Brightness", &brightness, 0.8f, 3.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::SliderFloat("Color boost", &color_boost, 1.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
-            ImGui::TextUnformatted("Размер стакана");
-            ImGui::SliderInt("Ширина", &desired_width, 5, 12);
-            ImGui::SliderInt("Глубина", &desired_depth, 5, 12);
-            ImGui::SliderInt("Высота", &desired_height, 12, 30);
+            ImGui::TextUnformatted("Well size");
+            ImGui::SliderInt("Width", &desired_width, 5, 12);
+            ImGui::SliderInt("Depth", &desired_depth, 5, 12);
+            ImGui::SliderInt("Height", &desired_height, 12, 30);
             bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
-            if (ImGui::Button("Применить размер") && size_changed)
+            if (ImGui::Button("Apply size") && size_changed)
             {
                 well_width = desired_width;
                 well_depth = desired_depth;
