@@ -425,6 +425,7 @@ int main()
     float brightness = 1.5f;
     float color_boost = 2.0f;
     bool rotating = false;
+    bool tilt_drag = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
     bool dock_built = false;
@@ -490,6 +491,35 @@ int main()
             yaw += static_cast<float>(dx) * 0.005f;
             last_mouse_x = mx;
             last_mouse_y = my;
+        }
+        else
+        {
+            rotating = false;
+        }
+
+        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        {
+            if (!tilt_drag)
+            {
+                tilt_drag = true;
+                last_mouse_x = mx;
+                last_mouse_y = my;
+            }
+            double dy = my - last_mouse_y;
+            pitch = std::clamp(pitch + static_cast<float>(dy) * 0.004f, to_radians(40.0f), to_radians(88.0f));
+            last_mouse_x = mx;
+            last_mouse_y = my;
+        }
+        else
+        {
+            tilt_drag = false;
+        }
+
+        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE && !tilt_drag)
+        {
+            yaw = 0.0f;
+            pitch = to_radians(89.0f);
+            distance = 24.0f;
         }
         else
         {
