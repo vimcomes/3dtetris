@@ -929,13 +929,14 @@ int main()
 
                 float yaw_iso = to_radians(45.0f);
                 float pitch_iso = to_radians(65.0f);
-                float dist_iso = 28.0f;
+                float dist_iso = 32.0f;
                 float cy = std::cos(yaw_iso);
                 float sy = std::sin(yaw_iso);
                 float cp = std::cos(pitch_iso);
                 float sp = std::sin(pitch_iso);
+                float center_y = static_cast<float>(game.well().height()) * cell_size * 0.5f;
                 Vec3 eye{dist_iso * sy * cp, dist_iso * sp, dist_iso * cy * cp};
-                Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                Mat4 view = look_at(eye, Vec3{0.f, center_y, 0.f}, Vec3{0.f, 1.f, 0.f});
                 float aspect = iso_size.x / iso_size.y;
                 Mat4 proj = perspective(55.0f, aspect, 0.1f, 120.0f);
                 Mat4 mvp_world = multiply(proj, view);
@@ -988,7 +989,6 @@ int main()
                         draw_mesh(active_mesh, model, p->color, 0.6f);
                     }
                 }
-
                 // Locked cells.
                 const auto& locked_positions = game.locked_cells();
                 const auto& locked_colors = game.locked_colors();
