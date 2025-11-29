@@ -165,6 +165,33 @@ std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell
     return vertices;
 }
 
+std::vector<float> build_checkbox_lines(float x, float y, float size, bool checked)
+{
+    // x,y in NDC (top-left anchor), size in NDC units.
+    float x0 = x;
+    float y0 = y;
+    float x1 = x + size;
+    float y1 = y - size;
+    std::vector<float> data;
+    auto push = [&](float xa, float ya, float xb, float yb, const float col[3])
+    {
+        data.insert(data.end(), {xa, ya, 0.f, col[0], col[1], col[2],
+                                 xb, yb, 0.f, col[0], col[1], col[2]});
+    };
+    float border[3] = {0.7f, 0.7f, 0.7f};
+    float mark[3] = {0.2f, 0.9f, 0.4f};
+    push(x0, y0, x1, y0, border);
+    push(x1, y0, x1, y1, border);
+    push(x1, y1, x0, y1, border);
+    push(x0, y1, x0, y0, border);
+    if (checked)
+    {
+        push(x0 + 0.2f * size, y - 0.5f * size, x0 + 0.45f * size, y1 + 0.15f * size, mark);
+        push(x0 + 0.45f * size, y1 + 0.15f * size, x1 - 0.15f * size, y + 0.15f * size, mark);
+    }
+    return data;
+}
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     (void)window;
@@ -298,6 +325,7 @@ int main()
         bool left = false, right = false, up = false, down = false;
         bool z = false, x = false;
         bool space = false;
+        bool f = false;
     } prev_keys;
 
     struct RepeatState
@@ -307,6 +335,7 @@ int main()
     };
     RepeatState move_x_neg, move_x_pos, move_z_neg, move_z_pos;
 
+    bool wireframe_active = false;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -321,6 +350,7 @@ int main()
                  "  I/K: move piece forward/backward (Z)\n"
                  "  J/L: move piece left/right (X)\n"
                  "  Space: hard drop\n"
+                 "  F: toggle wireframe render for active piece\n"
                  "  ESC: quit\n";
 
     while (!glfwWindowShouldClose(window))
@@ -372,6 +402,7 @@ int main()
         bool z_now = is_down(GLFW_KEY_Z);
         bool x_now = is_down(GLFW_KEY_X);
         bool space_now = is_down(GLFW_KEY_SPACE);
+        bool f_now = is_down(GLFW_KEY_F);
 
         if (left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
         {
@@ -425,8 +456,12 @@ int main()
             game.hard_drop();
             spin.active = false;
         }
+        if (f_now && !prev_keys.f)
+        {
+            wireframe_active = !wireframe_active;
+        }
 
-        prev_keys = {left_now, right_now, up_now, down_now, z_now, x_now, space_now};
+        prev_keys = {left_now, right_now, up_now, down_now, z_now, x_now, space_now, f_now};
 
         game.update(dt);
 
@@ -456,14 +491,18 @@ int main()
 
         glUseProgram(program);
 
-    auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
+    auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
         {
-            Mat4 mvp = multiply(mvp_world, model);
             glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
             glUniform3f(u_tint_loc, tint.x, tint.y, tint.z);
             glUniform1f(u_alpha_loc, alpha);
             glBindVertexArray(mesh.vao);
             glDrawArrays(mesh.mode, 0, mesh.count);
+        };
+        auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
+        {
+            Mat4 mvp = multiply(mvp_world, model);
+            draw_mesh_mvp(mesh, mvp, tint, alpha);
         };
 
         draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
@@ -528,7 +567,16 @@ int main()
                 model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
             }
 
-            draw_mesh(active_mesh, model, p->color, 0.45f);
+            if (wireframe_active)
+            {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                draw_mesh(active_mesh, model, p->color, 0.9f);
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            }
+            else
+            {
+                draw_mesh(active_mesh, model, p->color, 0.45f);
+            }
             glDepthMask(GL_TRUE);
             glEnable(GL_CULL_FACE);
         }
@@ -563,6 +611,17 @@ int main()
         }
 
         glBindVertexArray(0);
+        // UI overlay: simple checkbox for wireframe toggle.
+        std::vector<float> checkbox = build_checkbox_lines(-0.92f, 0.92f, 0.08f, wireframe_active);
+        update_mesh(active_mesh, checkbox);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        draw_mesh_mvp(active_mesh, identity(), wireframe_active ? Vec3{0.2f, 0.9f, 0.4f} : Vec3{0.7f, 0.7f, 0.7f}, 1.0f);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_DEPTH_TEST);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
