@@ -1001,12 +1001,19 @@ int main()
             ImGui::BulletText("Esc: quit");
             ImGui::Separator();
             ImGui::TextUnformatted("Debug");
-            if (ImGui::Button("AI fill bottom & clear"))
+            if (ImGui::Button("Fill bottom layer"))
             {
                 game.debug_fill_plane(0, Vec3{0.9f, 0.9f, 0.9f});
-                game.clear_full_planes();
+            }
+            ImGui::SameLine();
+            static int cleared_last = 0;
+            if (ImGui::Button("Clear full planes"))
+            {
+                cleared_last = game.clear_full_planes();
                 game.rebuild_locked_cache();
             }
+            ImGui::SameLine();
+            ImGui::Text("cleared: %d", cleared_last);
         }
         ImGui::End();
 
