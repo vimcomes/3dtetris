@@ -851,10 +851,15 @@ int main()
                 int fb_height = 1;
                 glfwGetFramebufferSize(window, &fb_width, &fb_height);
                 ImVec2 fb_scale = io.DisplayFramebufferScale;
-                int vx = static_cast<int>(iso_pos.x * fb_scale.x);
-                int vy = static_cast<int>((io.DisplaySize.y - iso_pos.y - iso_size.y) * fb_scale.y);
-                int vw = static_cast<int>(iso_size.x * fb_scale.x);
-                int vh = static_cast<int>(iso_size.y * fb_scale.y);
+                int vx_full = static_cast<int>(iso_pos.x * fb_scale.x);
+                int vy_full = static_cast<int>((io.DisplaySize.y - iso_pos.y - iso_size.y) * fb_scale.y);
+                int vw_full = static_cast<int>(iso_size.x * fb_scale.x);
+                int vh_full = static_cast<int>(iso_size.y * fb_scale.y);
+                int side = std::min(vw_full, vh_full);
+                int vx = vx_full + (vw_full - side) / 2;
+                int vy = vy_full + (vh_full - side) / 2;
+                int vw = side;
+                int vh = side;
 
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
@@ -887,8 +892,7 @@ int main()
                 float center_y = static_cast<float>(game.well().height()) * cell_size * 0.5f;
                 Vec3 eye{dist_iso * sy * cp, dist_iso * sp, dist_iso * cy * cp};
                 Mat4 view = look_at(eye, Vec3{0.f, center_y, 0.f}, Vec3{0.f, 1.f, 0.f});
-                float aspect = iso_size.x / iso_size.y;
-                Mat4 proj = perspective(55.0f, aspect, 0.1f, 120.0f);
+                Mat4 proj = perspective(55.0f, 1.0f, 0.1f, 120.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
                 glUseProgram(program);
