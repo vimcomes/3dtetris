@@ -611,7 +611,7 @@ int main()
                         std::min(c.z * brightness, 1.0f),
                     };
                 };
-                Vec3 clear = apply_brightness(Vec3{0.12f, 0.14f, 0.18f});
+                Vec3 clear{0.12f, 0.14f, 0.18f};
                 glClearColor(clear.x, clear.y, clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
