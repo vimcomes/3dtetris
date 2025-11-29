@@ -57,7 +57,7 @@ inline std::vector<float> build_cube_vertices()
 inline std::vector<float> build_floor_grid_lines(int width, int depth, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.35f, 0.4f, 0.45f};
+    float color[3] = {0.0f, 1.0f, 0.0f}; // neon green grid like Blockout
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -81,7 +81,7 @@ inline std::vector<float> build_floor_grid_lines(int width, int depth, float cel
 inline std::vector<float> build_well_outline_lines(int width, int depth, int height, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.45f, 0.7f, 0.95f};
+    float color[3] = {0.0f, 1.0f, 0.0f}; // neon green walls like Blockout
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -125,14 +125,14 @@ inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
     float max_z = 0.5f * depth * cell;
-    // Two triangles with a slight color gradient.
+    // Two triangles; keep black so the grid lines pop.
     return {
-        min_x, 0.f, min_z, 0.18f, 0.22f, 0.28f,
-        max_x, 0.f, min_z, 0.22f, 0.26f, 0.32f,
-        max_x, 0.f, max_z, 0.2f, 0.24f, 0.3f,
+        min_x, 0.f, min_z, 0.f, 0.f, 0.f,
+        max_x, 0.f, min_z, 0.f, 0.f, 0.f,
+        max_x, 0.f, max_z, 0.f, 0.f, 0.f,
 
-        min_x, 0.f, min_z, 0.18f, 0.22f, 0.28f,
-        max_x, 0.f, max_z, 0.2f, 0.24f, 0.3f,
-        min_x, 0.f, max_z, 0.16f, 0.2f, 0.26f,
+        min_x, 0.f, min_z, 0.f, 0.f, 0.f,
+        max_x, 0.f, max_z, 0.f, 0.f, 0.f,
+        min_x, 0.f, max_z, 0.f, 0.f, 0.f,
     };
 }

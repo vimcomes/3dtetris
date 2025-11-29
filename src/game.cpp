@@ -97,15 +97,15 @@ Game::Game(int w, int d, int h) : well_(w, d, h)
         {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}},
     };
 
-    // Saturated palette: cyan, yellow, magenta, orange, blue, green, red.
+    // Blockout-like neon palette: pure, high-saturation primaries.
     shape_colors_ = {
-        Vec3{0.0f, 1.0f, 1.0f},
-        Vec3{1.0f, 1.0f, 0.0f},
-        Vec3{1.0f, 0.0f, 1.0f},
-        Vec3{1.0f, 0.55f, 0.0f},
-        Vec3{0.1f, 0.45f, 1.0f},
-        Vec3{0.0f, 1.0f, 0.55f},
-        Vec3{1.0f, 0.0f, 0.0f},
+        Vec3{0.0f, 1.0f, 0.0f},  // green
+        Vec3{1.0f, 0.0f, 0.0f},  // red
+        Vec3{0.0f, 0.9f, 1.0f},  // cyan
+        Vec3{0.0f, 0.0f, 1.0f},  // blue
+        Vec3{1.0f, 0.75f, 0.0f}, // orange/yellow
+        Vec3{1.0f, 0.0f, 0.8f},  // magenta
+        Vec3{0.0f, 1.0f, 0.6f},  // aqua green
     };
 
     rng_.seed(std::random_device{}());

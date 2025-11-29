@@ -383,10 +383,10 @@ int main()
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
 
-    constexpr int well_width = 10;
-    constexpr int well_depth = 10;
-    constexpr int well_height = 20;
-    constexpr float cell_size = 1.0f;
+    int well_width = 10;
+    int well_depth = 10;
+    int well_height = 20;
+    const float cell_size = 1.0f;
 
     auto floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
     auto walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
@@ -396,7 +396,7 @@ int main()
 
     float yaw = 0.0f;
     float pitch = to_radians(89.0f);
-    float distance = 24.0f;
+    float distance = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
     double prev_time = glfwGetTime();
 
     Game game{well_width, well_depth, well_height};
@@ -425,8 +425,8 @@ int main()
     RepeatState move_x_neg, move_x_pos, move_z_neg, move_z_pos;
 
     bool wireframe_active = false;
-    float brightness = 1.5f;
-    float color_boost = 2.0f;
+    float brightness = 1.0f;
+    float color_boost = 1.0f;
     bool rotating = false;
     struct RmbState
     {
@@ -448,6 +448,10 @@ int main()
         std::vector<AiPlanStep> plan;
         size_t plan_idx = 0;
     } auto_play;
+
+    int desired_width = well_width;
+    int desired_depth = well_depth;
+    int desired_height = well_height;
 
     std::cout << "Controls:\n"
                  "  Mouse drag: rotate view around vertical axis\n"
@@ -722,18 +726,12 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 auto apply_tone = [&](const Vec3& c)
                 {
                     float gain = std::max(brightness * color_boost, 0.1f);
-                    Vec3 v{c.x * gain, c.y * gain, c.z * gain};
-                    float maxc = std::max(v.x, std::max(v.y, v.z));
-                    if (maxc > 1.0f)
-                    {
-                        float inv = 1.0f / maxc;
-                        v.x *= inv;
-                        v.y *= inv;
-                        v.z *= inv;
-                    }
-                    return v;
+                    return Vec3{
+                        std::clamp(c.x * gain, 0.0f, 1.0f),
+                        std::clamp(c.y * gain, 0.0f, 1.0f),
+                        std::clamp(c.z * gain, 0.0f, 1.0f)};
                 };
-                Vec3 clear{0.12f, 0.14f, 0.18f};
+                Vec3 clear{0.0f, 0.0f, 0.0f};
                 glClearColor(clear.x, clear.y, clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -765,9 +763,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     draw_mesh_mvp(mesh, mvp, tint, alpha);
                 };
 
-                draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-                draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
+                draw_mesh(walls_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
 
                 // Active piece with simple spin animation (render on top).
                 if (const auto& p = game.active_piece())
@@ -813,7 +811,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.6f);
+                        draw_mesh(active_mesh, model, p->color, 0.85f);
                     }
                     glDepthMask(GL_TRUE);
                     glEnable(GL_DEPTH_TEST);
@@ -827,7 +825,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     update_mesh(active_edges, ghost_edges);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    draw_mesh(active_edges, identity(), Vec3{0.7f, 0.75f, 0.8f}, 0.3f);
+                    draw_mesh(active_edges, identity(), Vec3{1.0f, 1.0f, 1.0f}, 0.32f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                 }
@@ -870,7 +868,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     update_mesh(active_edges, ghost_edges);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    draw_mesh(active_edges, identity(), Vec3{0.7f, 0.75f, 0.8f}, 0.3f);
+                    draw_mesh(active_edges, identity(), Vec3{1.0f, 1.0f, 1.0f}, 0.32f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                 }
@@ -918,7 +916,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.6f);
+                        draw_mesh(active_mesh, model, p->color, 0.85f);
                     }
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
@@ -966,24 +964,18 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 auto apply_tone = [&](const Vec3& c)
                 {
                     float gain = std::max(brightness * color_boost, 0.1f);
-                    Vec3 v{c.x * gain, c.y * gain, c.z * gain};
-                    float maxc = std::max(v.x, std::max(v.y, v.z));
-                    if (maxc > 1.0f)
-                    {
-                        float inv = 1.0f / maxc;
-                        v.x *= inv;
-                        v.y *= inv;
-                        v.z *= inv;
-                    }
-                    return v;
+                    return Vec3{
+                        std::clamp(c.x * gain, 0.0f, 1.0f),
+                        std::clamp(c.y * gain, 0.0f, 1.0f),
+                        std::clamp(c.z * gain, 0.0f, 1.0f)};
                 };
-                Vec3 clear{0.12f, 0.14f, 0.18f};
+                Vec3 clear{0.0f, 0.0f, 0.0f};
                 glClearColor(clear.x, clear.y, clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 float yaw_iso = to_radians(45.0f);
                 float pitch_iso = to_radians(65.0f);
-                float dist_iso = 36.0f;
+                float dist_iso = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
                 float cy = std::cos(yaw_iso);
                 float sy = std::sin(yaw_iso);
                 float cp = std::cos(pitch_iso);
@@ -1010,9 +1002,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     draw_mesh_mvp(mesh, mvp, tint, alpha);
                 };
 
-                draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-                draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
+                draw_mesh(walls_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
 
                 if (const auto& p = game.active_piece())
                 {
@@ -1088,6 +1080,30 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::SliderFloat("Brightness", &brightness, 0.8f, 3.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::SliderFloat("Color boost", &color_boost, 1.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::Separator();
+            ImGui::TextUnformatted("Размер стакана");
+            ImGui::SliderInt("Ширина", &desired_width, 5, 12);
+            ImGui::SliderInt("Глубина", &desired_depth, 5, 12);
+            ImGui::SliderInt("Высота", &desired_height, 12, 30);
+            bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
+            if (ImGui::Button("Применить размер") && size_changed)
+            {
+                well_width = desired_width;
+                well_depth = desired_depth;
+                well_height = desired_height;
+                destroy_mesh(floor_mesh);
+                destroy_mesh(walls_mesh);
+                destroy_mesh(bottom_mesh);
+                floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
+                walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
+                bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
+                game = Game{well_width, well_depth, well_height};
+                spin = {};
+                auto_play = {};
+                yaw = 0.0f;
+                pitch = to_radians(89.0f);
+                distance = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
+            }
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
