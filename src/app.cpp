@@ -472,7 +472,7 @@ int main()
             ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.32f, &right_id, &left_id);
             ImGuiID right_bottom = 0;
             ImGuiID right_top = right_id;
-            ImGui::DockBuilderSplitNode(right_id, ImGuiDir_Down, 0.35f, &right_bottom, &right_top);
+            ImGui::DockBuilderSplitNode(right_id, ImGuiDir_Down, 0.5f, &right_bottom, &right_top);
             ImGui::DockBuilderDockWindow("Controls", right_top);
             ImGui::DockBuilderDockWindow("Iso View", right_bottom);
             ImGui::DockBuilderDockWindow("Viewport", left_id);
@@ -864,7 +864,7 @@ int main()
 
                 float yaw_iso = to_radians(45.0f);
                 float pitch_iso = to_radians(65.0f);
-                float dist_iso = 32.0f;
+                float dist_iso = 36.0f;
                 float cy = std::cos(yaw_iso);
                 float sy = std::sin(yaw_iso);
                 float cp = std::cos(pitch_iso);
