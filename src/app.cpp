@@ -724,18 +724,10 @@ int main()
                 draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
                 draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
 
-                if (spin.active)
-                {
-                    spin.t += dt;
-                    if (spin.t >= spin.duration)
-                    {
-                        spin.active = false;
-                    }
-                }
-
-                // Active piece with simple spin animation.
+                // Active piece with simple spin animation (render on top).
                 if (const auto& p = game.active_piece())
                 {
+                    glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE); // allow both sides for translucent active piece
                     glDepthMask(GL_FALSE); // allow seeing locked blocks through translucent active piece.
                     Vec3 pivot{0.f, 0.f, 0.f};
@@ -779,6 +771,7 @@ int main()
                         draw_mesh(active_mesh, model, p->color, 0.6f);
                     }
                     glDepthMask(GL_TRUE);
+                    glEnable(GL_DEPTH_TEST);
                     glEnable(GL_CULL_FACE);
                 }
 
@@ -824,6 +817,67 @@ int main()
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+                // Ghost projection on landing spot (wireframe, low alpha).
+                if (const auto ghost = game.ghost_piece())
+                {
+                    auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
+                    update_mesh(active_edges, ghost_edges);
+                    glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
+                    draw_mesh(active_edges, identity(), Vec3{0.7f, 0.75f, 0.8f}, 0.3f);
+                    glDepthMask(GL_TRUE);
+                    glEnable(GL_CULL_FACE);
+                }
+
+                // Active piece drawn last to avoid being covered by filled layers.
+                if (const auto& p = game.active_piece())
+                {
+                    Vec3 pivot{0.f, 0.f, 0.f};
+                    for (const auto& b : p->blocks)
+                    {
+                        Vec3i c{p->pos.x + b.x, p->pos.y + b.y, p->pos.z + b.z};
+                        Vec3 world = game.well().cell_center(c, cell_size);
+                        pivot.x += world.x;
+                        pivot.y += world.y;
+                        pivot.z += world.z;
+                    }
+                    float inv = 1.0f / static_cast<float>(p->blocks.size());
+                    pivot.x *= inv;
+                    pivot.y *= inv;
+                    pivot.z *= inv;
+
+                    auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
+                    auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
+                    update_mesh(active_mesh, piece_vertices);
+                    update_mesh(active_edges, edge_vertices);
+
+                    Mat4 model = translation(pivot);
+                    if (spin_angle != 0.0f)
+                    {
+                        if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
+                        else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
+                        else model = multiply(model, rotation_z(spin_angle));
+                    }
+                    model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
+                    if (fall_offset > 0.0f)
+                    {
+                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
+                    }
+
+                    glDisable(GL_DEPTH_TEST);
+                    glDisable(GL_CULL_FACE);
+                    if (wireframe_active)
+                    {
+                        draw_mesh(active_edges, model, p->color, 0.95f);
+                    }
+                    else
+                    {
+                        draw_mesh(active_mesh, model, p->color, 0.6f);
+                    }
+                    glEnable(GL_CULL_FACE);
+                    glEnable(GL_DEPTH_TEST);
+                }
 
                 glBindVertexArray(0);
                 glDisable(GL_SCISSOR_TEST);
