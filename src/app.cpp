@@ -575,7 +575,11 @@ int main()
         game.update(dt);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-        ImGuiWindowFlags viewport_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        ImGuiWindowFlags viewport_flags = ImGuiWindowFlags_NoDecoration |
+                                          ImGuiWindowFlags_NoMove |
+                                          ImGuiWindowFlags_NoScrollbar |
+                                          ImGuiWindowFlags_NoScrollWithMouse |
+                                          ImGuiWindowFlags_NoBackground;
         if (ImGui::Begin("Viewport", nullptr, viewport_flags))
         {
             ImVec2 content_min = ImGui::GetWindowContentRegionMin();
