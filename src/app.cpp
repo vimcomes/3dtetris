@@ -436,6 +436,7 @@ int main()
     double last_mouse_y = 0.0;
     bool dock_built = false;
     struct ViewportRect { float x0 = 0.f, y0 = 0.f, x1 = static_cast<float>(start_width), y1 = static_cast<float>(start_height); } viewport_rect;
+    bool viewport_hovered = false;
 
     std::cout << "Controls:\n"
                  "  Mouse drag: rotate view around vertical axis\n"
@@ -555,27 +556,27 @@ int main()
         bool a_now = is_down(GLFW_KEY_A);
         bool d_now = is_down(GLFW_KEY_D);
 
-        if (!io.WantCaptureKeyboard && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && in_viewport && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
         {
             spin = {true, Axis::Y, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && in_viewport && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
         {
             spin = {true, Axis::Y, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && in_viewport && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
         {
             spin = {true, Axis::X, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
+        if (!io.WantCaptureKeyboard && in_viewport && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && in_viewport && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && in_viewport && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 0.15f};
         }
@@ -599,10 +600,10 @@ int main()
 
         if (!io.WantCaptureKeyboard)
         {
-            handle_repeat(is_down(GLFW_KEY_J) || a_now, move_x_neg, [&] { game.move_active(-1, 0); });
-            handle_repeat(is_down(GLFW_KEY_L) || d_now, move_x_pos, [&] { game.move_active(1, 0); });
-            handle_repeat(is_down(GLFW_KEY_I), move_z_neg, [&] { game.move_active(0, -1); });
-            handle_repeat(is_down(GLFW_KEY_K), move_z_pos, [&] { game.move_active(0, 1); });
+            handle_repeat((is_down(GLFW_KEY_J) || a_now) && in_viewport, move_x_neg, [&] { game.move_active(-1, 0); });
+            handle_repeat((is_down(GLFW_KEY_L) || d_now) && in_viewport, move_x_pos, [&] { game.move_active(1, 0); });
+            handle_repeat(is_down(GLFW_KEY_I) && in_viewport, move_z_neg, [&] { game.move_active(0, -1); });
+            handle_repeat(is_down(GLFW_KEY_K) && in_viewport, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
         if (!io.WantCaptureKeyboard && space_now && !prev_keys.space)
@@ -610,7 +611,7 @@ int main()
             game.hard_drop();
             spin.active = false;
         }
-        if (!io.WantCaptureKeyboard && f_now && !prev_keys.f)
+        if (!io.WantCaptureKeyboard && in_viewport && f_now && !prev_keys.f)
         {
             wireframe_active = !wireframe_active;
         }
@@ -633,6 +634,7 @@ int main()
             ImVec2 viewport_pos{window_pos.x + content_min.x, window_pos.y + content_min.y};
             ImVec2 viewport_size{content_max.x - content_min.x, content_max.y - content_min.y};
             viewport_rect = {viewport_pos.x, viewport_pos.y, viewport_pos.x + viewport_size.x, viewport_pos.y + viewport_size.y};
+            viewport_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
 
             if (viewport_size.x > 0.f && viewport_size.y > 0.f)
             {
