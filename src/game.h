@@ -75,7 +75,7 @@ private:
     std::vector<Vec3i> locked_positions_;
     std::vector<Vec3> locked_colors_;
     float fall_timer_ = 0.0f;
-    float fall_interval_ = 0.7f;
+    float fall_interval_ = 1.2f;
     std::mt19937 rng_;
 
     Piece spawn_piece();
