@@ -43,6 +43,14 @@ bool Well::is_free(const Vec3i& c) const
     return !cells_[index3(c.x, c.y, c.z, width_, depth_)].filled;
 }
 
+void Well::set_cell(const Vec3i& c, bool filled, const Vec3& color)
+{
+    if (!in_bounds(c)) return;
+    auto& cell = cells_[index3(c.x, c.y, c.z, width_, depth_)];
+    cell.filled = filled;
+    cell.color = color;
+}
+
 void Well::lock_piece(const Piece& p)
 {
     for (auto b : p.blocks)
@@ -147,6 +155,74 @@ void Game::try_lock_and_spawn()
         return;
     }
     well_.lock_piece(*active_);
+    clear_full_planes();
+    rebuild_locked_cache();
+    active_ = spawn_piece();
+    if (!can_place(*active_))
+    {
+        // Simple reset on top collision.
+        well_ = Well(well_.width(), well_.depth(), well_.height());
+        locked_positions_.clear();
+        locked_colors_.clear();
+        active_ = spawn_piece();
+    }
+}
+
+int Game::clear_full_planes()
+{
+    int cleared = 0;
+    for (int y = 0; y < well_.height(); ++y)
+    {
+        bool full = true;
+        for (int z = 0; z < well_.depth() && full; ++z)
+        {
+            for (int x = 0; x < well_.width(); ++x)
+            {
+                if (well_.is_free(Vec3i{x, y, z}))
+                {
+                    full = false;
+                    break;
+                }
+            }
+        }
+        if (!full)
+        {
+            continue;
+        }
+        // Shift layers above down.
+        for (int yy = y; yy < well_.height() - 1; ++yy)
+        {
+            for (int z = 0; z < well_.depth(); ++z)
+            {
+                for (int x = 0; x < well_.width(); ++x)
+                {
+                    Vec3i from{x, yy + 1, z};
+                    Vec3i to{x, yy, z};
+                    if (well_.in_bounds(from))
+                    {
+                        const auto& src = well_.cells()[index3(from.x, from.y, from.z, well_.width(), well_.depth())];
+                        well_.set_cell(to, src.filled, src.color);
+                    }
+                }
+            }
+        }
+        // Clear top layer.
+        int top = well_.height() - 1;
+        for (int z = 0; z < well_.depth(); ++z)
+        {
+            for (int x = 0; x < well_.width(); ++x)
+            {
+                well_.set_cell(Vec3i{x, top, z}, false, Vec3{});
+            }
+        }
+        ++cleared;
+        --y; // recheck this y after collapsing.
+    }
+    return cleared;
+}
+
+void Game::rebuild_locked_cache()
+{
     locked_positions_.clear();
     locked_colors_.clear();
     for (int y = 0; y < well_.height(); ++y)
@@ -165,15 +241,19 @@ void Game::try_lock_and_spawn()
             }
         }
     }
-    active_ = spawn_piece();
-    if (!can_place(*active_))
+}
+
+void Game::debug_fill_plane(int y, const Vec3& color)
+{
+    if (y < 0 || y >= well_.height()) return;
+    for (int z = 0; z < well_.depth(); ++z)
     {
-        // Simple reset on top collision.
-        well_ = Well(well_.width(), well_.depth(), well_.height());
-        locked_positions_.clear();
-        locked_colors_.clear();
-        active_ = spawn_piece();
+        for (int x = 0; x < well_.width(); ++x)
+        {
+            well_.set_cell(Vec3i{x, y, z}, true, color);
+        }
     }
+    rebuild_locked_cache();
 }
 
 void Game::update(float dt)

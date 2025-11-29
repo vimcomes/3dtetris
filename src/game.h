@@ -34,6 +34,7 @@ public:
 
     [[nodiscard]] bool in_bounds(const Vec3i& c) const;
     [[nodiscard]] bool is_free(const Vec3i& c) const;
+    void set_cell(const Vec3i& c, bool filled, const Vec3& color);
     void lock_piece(const Piece& p);
     [[nodiscard]] Vec3 cell_center(const Vec3i& c, float cell_size) const;
 
@@ -61,6 +62,9 @@ public:
     [[nodiscard]] std::optional<Piece> ghost_piece() const;
     [[nodiscard]] float fall_progress() const;
     [[nodiscard]] bool active_can_fall() const;
+    int clear_full_planes();
+    void debug_fill_plane(int y, const Vec3& color);
+    void rebuild_locked_cache();
 
     const Well& well() const { return well_; }
     const std::optional<Piece>& active_piece() const { return active_; }
