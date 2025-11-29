@@ -421,6 +421,7 @@ int main()
     RepeatState move_x_neg, move_x_pos, move_z_neg, move_z_pos;
 
     bool wireframe_active = false;
+    float brightness = 1.0f;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -602,7 +603,16 @@ int main()
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(vx, vy, vw, vh);
-                glClearColor(0.12f, 0.14f, 0.18f, 1.0f);
+                auto apply_brightness = [&](const Vec3& c)
+                {
+                    return Vec3{
+                        std::min(c.x * brightness, 1.0f),
+                        std::min(c.y * brightness, 1.0f),
+                        std::min(c.z * brightness, 1.0f),
+                    };
+                };
+                Vec3 clear = apply_brightness(Vec3{0.12f, 0.14f, 0.18f});
+                glClearColor(clear.x, clear.y, clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 float cy = std::cos(yaw);
@@ -620,8 +630,9 @@ int main()
 
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
+                    Vec3 t = apply_brightness(tint);
                     glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, tint.x, tint.y, tint.z);
+                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
                     glUniform1f(u_alpha_loc, alpha);
                     glBindVertexArray(mesh.vao);
                     glDrawArrays(mesh.mode, 0, mesh.count);
@@ -746,6 +757,7 @@ int main()
         {
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
+            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 1.8f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
