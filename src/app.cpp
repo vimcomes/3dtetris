@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <set>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glad/glad.h>
@@ -259,6 +261,124 @@ std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cel
         out.push_back(e.v[3]); out.push_back(e.v[4]); out.push_back(e.v[5]); out.push_back(1.f); out.push_back(1.f); out.push_back(1.f);
     }
     return out;
+}
+
+struct Glyph
+{
+    std::array<std::string, 7> rows{};
+};
+
+Glyph make_glyph(std::initializer_list<const char*> rows)
+{
+    Glyph g{};
+    size_t i = 0;
+    for (auto* r : rows)
+    {
+        g.rows[i++] = r;
+    }
+    return g;
+}
+
+const std::unordered_map<char, Glyph> kGlyphs = {
+    {'A', make_glyph({" ### ", "#   #", "#   #", "#####", "#   #", "#   #", "....."})},
+    {'B', make_glyph({"#### ", "#   #", "#### ", "#   #", "#   #", "#### ", "....."})},
+    {'C', make_glyph({" ### ", "#   #", "#    ", "#    ", "#   #", " ### ", "....."})},
+    {'D', make_glyph({"#### ", "#   #", "#   #", "#   #", "#   #", "#### ", "....."})},
+    {'E', make_glyph({"#####", "#    ", "#### ", "#    ", "#    ", "#####", "....."})},
+    {'F', make_glyph({"#####", "#    ", "#### ", "#    ", "#    ", "#    ", "....."})},
+    {'G', make_glyph({" ### ", "#   #", "#    ", "# ###", "#   #", " ### ", "....."})},
+    {'H', make_glyph({"#   #", "#   #", "#####", "#   #", "#   #", "#   #", "....."})},
+    {'I', make_glyph({"#####", "  #  ", "  #  ", "  #  ", "  #  ", "#####", "....."})},
+    {'J', make_glyph({"#####", "   # ", "   # ", "   # ", "#  # ", " ##  ", "....."})},
+    {'K', make_glyph({"#   #", "#  # ", "###  ", "#  # ", "#   #", "#   #", "....."})},
+    {'L', make_glyph({"#    ", "#    ", "#    ", "#    ", "#    ", "#####", "....."})},
+    {'M', make_glyph({"#   #", "## ##", "# # #", "#   #", "#   #", "#   #", "....."})},
+    {'N', make_glyph({"#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "....."})},
+    {'O', make_glyph({" ### ", "#   #", "#   #", "#   #", "#   #", " ### ", "....."})},
+    {'P', make_glyph({"#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "....."})},
+    {'Q', make_glyph({" ### ", "#   #", "#   #", "#   #", "#  ##", " ####", "....."})},
+    {'R', make_glyph({"#### ", "#   #", "#   #", "#### ", "#  # ", "#   #", "....."})},
+    {'S', make_glyph({" ####", "#    ", "#    ", " ### ", "    #", "#### ", "....."})},
+    {'T', make_glyph({"#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "....."})},
+    {'U', make_glyph({"#   #", "#   #", "#   #", "#   #", "#   #", " ### ", "....."})},
+    {'V', make_glyph({"#   #", "#   #", "#   #", "#   #", " # # ", "  #  ", "....."})},
+    {'W', make_glyph({"#   #", "#   #", "# # #", "# # #", "## ##", "#   #", "....."})},
+    {'X', make_glyph({"#   #", " # # ", "  #  ", "  #  ", " # # ", "#   #", "....."})},
+    {'Y', make_glyph({"#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  ", "....."})},
+    {'Z', make_glyph({"#####", "   # ", "  #  ", "  #  ", " #   ", "#####", "....."})},
+    {'0', make_glyph({" ### ", "#  ##", "# # #", "# # #", "##  #", " ### ", "....."})},
+    {'1', make_glyph({"  #  ", " ##  ", "  #  ", "  #  ", "  #  ", " ### ", "....."})},
+    {'2', make_glyph({" ### ", "#   #", "   # ", "  #  ", " #   ", "#####", "....."})},
+    {'3', make_glyph({" ### ", "#   #", "   # ", "  ## ", "    #", " ### ", "....."})},
+    {'4', make_glyph({"#  # ", "#  # ", "#  # ", "#####", "   # ", "   # ", "....."})},
+    {'5', make_glyph({"#####", "#    ", "#### ", "    #", "#   #", " ### ", "....."})},
+    {'6', make_glyph({" ### ", "#    ", "#### ", "#   #", "#   #", " ### ", "....."})},
+    {'7', make_glyph({"#####", "    #", "   # ", "  #  ", "  #  ", "  #  ", "....."})},
+    {'8', make_glyph({" ### ", "#   #", " ### ", "#   #", "#   #", " ### ", "....."})},
+    {'9', make_glyph({" ### ", "#   #", "#   #", " ####", "    #", " ### ", "....."})},
+    {':', make_glyph({".....", "  #  ", ".....", ".....", "  #  ", ".....", "....."})},
+    {'/', make_glyph({"    #", "   # ", "   # ", "  #  ", "  #  ", " #   ", "#    "})},
+    {'-', make_glyph({".....", ".....", "#####", ".....", ".....", ".....", "....."})},
+    {' ', make_glyph({".....", ".....", ".....", ".....", ".....", ".....", "....."})},
+};
+
+std::vector<float> build_text_quads(const std::string& text, float x, float y, float scale, const Vec3& color)
+{
+    std::vector<float> out;
+    float cursor_x = x;
+    float cursor_y = y;
+    const float glyph_w = 5.f * scale;
+    const float glyph_h = 7.f * scale;
+    const float spacing = scale * 1.2f;
+
+    for (char ch_raw : text)
+    {
+        char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch_raw)));
+        if (ch == '\n')
+        {
+            cursor_x = x;
+            cursor_y -= (glyph_h + spacing);
+            continue;
+        }
+        auto it = kGlyphs.find(ch);
+        const Glyph* g = (it != kGlyphs.end()) ? &it->second : &kGlyphs.at(' ');
+        for (int row = 0; row < 7; ++row)
+        {
+            for (int col = 0; col < 5; ++col)
+            {
+                if ((*g).rows[row][col] != '#')
+                {
+                    continue;
+                }
+                float x0 = cursor_x + col * scale;
+                float y0 = cursor_y - row * scale;
+                float x1 = x0 + scale;
+                float y1 = y0 - scale;
+                out.insert(out.end(), {
+                    x0, y0, 0.f, color.x, color.y, color.z,
+                    x1, y0, 0.f, color.x, color.y, color.z,
+                    x1, y1, 0.f, color.x, color.y, color.z,
+                    x0, y0, 0.f, color.x, color.y, color.z,
+                    x1, y1, 0.f, color.x, color.y, color.z,
+                    x0, y1, 0.f, color.x, color.y, color.z,
+                });
+            }
+        }
+        cursor_x += glyph_w + spacing;
+    }
+    return out;
+}
+
+std::vector<float> build_panel_quad(float left, float right, float top, float bottom, const Vec3& color)
+{
+    return {
+        left,  top,    0.f, color.x, color.y, color.z,
+        right, top,    0.f, color.x, color.y, color.z,
+        right, bottom, 0.f, color.x, color.y, color.z,
+        left,  top,    0.f, color.x, color.y, color.z,
+        right, bottom, 0.f, color.x, color.y, color.z,
+        left,  bottom, 0.f, color.x, color.y, color.z,
+    };
 }
 
 std::vector<float> build_checkbox_lines(float x, float y, float size, bool checked)
@@ -685,7 +805,7 @@ int main()
             update_mesh(active_edges, ghost_edges);
             glDisable(GL_CULL_FACE);
             glDepthMask(GL_FALSE);
-            draw_mesh(active_edges, identity(), ghost->color, 0.22f);
+            draw_mesh(active_edges, identity(), Vec3{0.65f, 0.7f, 0.75f}, 0.22f);
             glDepthMask(GL_TRUE);
             glEnable(GL_CULL_FACE);
         }
@@ -706,14 +826,37 @@ int main()
         }
 
         glBindVertexArray(0);
-        // UI overlay: simple checkbox for wireframe toggle.
-        std::vector<float> checkbox = build_checkbox_lines(-0.92f, 0.92f, 0.08f, wireframe_active);
-        update_mesh(active_mesh, checkbox);
+        // UI overlay panel on the right.
+        glViewport(0, 0, fb_width, fb_height);
+        float panel_left = 0.55f;
+        float panel_right = 0.98f;
+        float panel_top = 0.92f;
+        float panel_bottom = -0.92f;
+        std::vector<float> panel = build_panel_quad(panel_left, panel_right, panel_top, panel_bottom, Vec3{0.06f, 0.08f, 0.12f});
+        update_mesh(active_mesh, panel);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 0.85f);
+
+        // Checkbox.
+        std::vector<float> checkbox = build_checkbox_lines(panel_left + 0.03f, panel_top - 0.03f, 0.06f, wireframe_active);
+        update_mesh(active_mesh, checkbox);
         draw_mesh_mvp(active_mesh, identity(), wireframe_active ? Vec3{0.2f, 0.9f, 0.4f} : Vec3{0.7f, 0.7f, 0.7f}, 1.0f);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        // Text lines.
+        std::string text =
+            "F: WIREFRAME\n"
+            "SPACE: HARD DROP\n"
+            "ARROWS/Z/X: ROTATE\n"
+            "I/K/J/L: MOVE\n"
+            "MOUSE DRAG: ORBIT\n"
+            "Q/E: ZOOM\n"
+            "W/S: TILT\n"
+            "ESC: QUIT";
+        auto text_mesh = build_text_quads(text, panel_left + 0.1f, panel_top - 0.05f, 0.025f, Vec3{0.8f, 0.85f, 0.9f});
+        update_mesh(active_mesh, text_mesh);
+        draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
 
