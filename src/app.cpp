@@ -485,7 +485,7 @@ int main()
         double mx = 0.0, my = 0.0;
         glfwGetCursorPos(window, &mx, &my);
         bool in_viewport = mx >= viewport_rect.x0 && mx <= viewport_rect.x1 && my >= viewport_rect.y0 && my <= viewport_rect.y1;
-        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        if (!io.WantCaptureMouse && in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             if (!rotating)
             {
@@ -503,7 +503,7 @@ int main()
             rotating = false;
         }
 
-        if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        if (!io.WantCaptureMouse && in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
         {
             if (!rmb.down)
             {
@@ -533,10 +533,6 @@ int main()
             rmb.down = false;
             rmb.dragged = false;
         }
-        else
-        {
-            rotating = false;
-        }
 
         // Camera anchored top-down with slight tilt; allow mild zoom and pitch adjust.
         const float zoom_speed = 6.0f;
@@ -556,6 +552,8 @@ int main()
         bool x_now = is_down(GLFW_KEY_X);
         bool space_now = is_down(GLFW_KEY_SPACE);
         bool f_now = is_down(GLFW_KEY_F);
+        bool a_now = is_down(GLFW_KEY_A);
+        bool d_now = is_down(GLFW_KEY_D);
 
         if (!io.WantCaptureKeyboard && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
         {
@@ -601,8 +599,8 @@ int main()
 
         if (!io.WantCaptureKeyboard)
         {
-            handle_repeat(is_down(GLFW_KEY_J), move_x_neg, [&] { game.move_active(-1, 0); });
-            handle_repeat(is_down(GLFW_KEY_L), move_x_pos, [&] { game.move_active(1, 0); });
+            handle_repeat(is_down(GLFW_KEY_J) || a_now, move_x_neg, [&] { game.move_active(-1, 0); });
+            handle_repeat(is_down(GLFW_KEY_L) || d_now, move_x_pos, [&] { game.move_active(1, 0); });
             handle_repeat(is_down(GLFW_KEY_I), move_z_neg, [&] { game.move_active(0, -1); });
             handle_repeat(is_down(GLFW_KEY_K), move_z_pos, [&] { game.move_active(0, 1); });
         }
