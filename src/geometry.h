@@ -57,7 +57,7 @@ inline std::vector<float> build_cube_vertices()
 inline std::vector<float> build_floor_grid_lines(int width, int depth, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.25f, 0.3f, 0.35f};
+    float color[3] = {0.35f, 0.4f, 0.45f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -81,7 +81,7 @@ inline std::vector<float> build_floor_grid_lines(int width, int depth, float cel
 inline std::vector<float> build_well_outline_lines(int width, int depth, int height, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.35f, 0.6f, 0.85f};
+    float color[3] = {0.45f, 0.7f, 0.95f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -102,7 +102,7 @@ inline std::vector<float> build_well_outline_lines(int width, int depth, int hei
     }
 
     // Horizontal rings every few levels to hint depth.
-    const int ring_step = 5;
+    const int ring_step = 2;
     for (int level = ring_step; level <= height; level += ring_step)
     {
         float y = level * cell;
@@ -127,12 +127,12 @@ inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
     float max_z = 0.5f * depth * cell;
     // Two triangles with a slight color gradient.
     return {
-        min_x, 0.f, min_z, 0.1f, 0.15f, 0.2f,
-        max_x, 0.f, min_z, 0.15f, 0.2f, 0.25f,
-        max_x, 0.f, max_z, 0.12f, 0.18f, 0.24f,
+        min_x, 0.f, min_z, 0.18f, 0.22f, 0.28f,
+        max_x, 0.f, min_z, 0.22f, 0.26f, 0.32f,
+        max_x, 0.f, max_z, 0.2f, 0.24f, 0.3f,
 
-        min_x, 0.f, min_z, 0.1f, 0.15f, 0.2f,
-        max_x, 0.f, max_z, 0.12f, 0.18f, 0.24f,
-        min_x, 0.f, max_z, 0.08f, 0.12f, 0.18f,
+        min_x, 0.f, min_z, 0.18f, 0.22f, 0.28f,
+        max_x, 0.f, max_z, 0.2f, 0.24f, 0.3f,
+        min_x, 0.f, max_z, 0.16f, 0.2f, 0.26f,
     };
 }

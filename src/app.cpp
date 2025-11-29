@@ -602,7 +602,7 @@ int main()
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(vx, vy, vw, vh);
-                glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
+                glClearColor(0.12f, 0.14f, 0.18f, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 float cy = std::cos(yaw);
