@@ -605,10 +605,11 @@ int main()
                 glScissor(vx, vy, vw, vh);
                 auto apply_brightness = [&](const Vec3& c)
                 {
+                    float gamma = 1.0f / std::max(brightness, 0.05f);
                     return Vec3{
-                        std::min(c.x * brightness, 1.0f),
-                        std::min(c.y * brightness, 1.0f),
-                        std::min(c.z * brightness, 1.0f),
+                        std::pow(std::clamp(c.x, 0.0f, 1.0f), gamma),
+                        std::pow(std::clamp(c.y, 0.0f, 1.0f), gamma),
+                        std::pow(std::clamp(c.z, 0.0f, 1.0f), gamma),
                     };
                 };
                 Vec3 clear{0.12f, 0.14f, 0.18f};
@@ -757,7 +758,7 @@ int main()
         {
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
-            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 1.8f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 6.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
