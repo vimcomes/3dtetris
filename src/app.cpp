@@ -422,7 +422,7 @@ int main()
 
     bool wireframe_active = false;
     float brightness = 1.2f;
-    float color_boost = 1.0f;
+    float color_boost = 1.2f;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -606,11 +606,11 @@ int main()
                 glScissor(vx, vy, vw, vh);
                 auto apply_tone = [&](const Vec3& c)
                 {
-                    float exposure = std::max(brightness, 0.05f);
+                    float gain = std::max(brightness * color_boost, 0.1f);
                     Vec3 v{
-                        1.0f - std::exp(-std::clamp(c.x * color_boost, 0.0f, 5.0f) * exposure),
-                        1.0f - std::exp(-std::clamp(c.y * color_boost, 0.0f, 5.0f) * exposure),
-                        1.0f - std::exp(-std::clamp(c.z * color_boost, 0.0f, 5.0f) * exposure),
+                        std::min(c.x * gain, 1.0f),
+                        std::min(c.y * gain, 1.0f),
+                        std::min(c.z * gain, 1.0f),
                     };
                     return v;
                 };
@@ -760,8 +760,8 @@ int main()
         {
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
-            ImGui::SliderFloat("Exposure", &brightness, 0.5f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::SliderFloat("Color boost", &color_boost, 0.6f, 1.8f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Brightness", &brightness, 0.5f, 3.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Color boost", &color_boost, 0.8f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
