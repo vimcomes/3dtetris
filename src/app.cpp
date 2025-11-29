@@ -342,7 +342,7 @@ int main()
     ImGui_ImplOpenGL3_Init("#version 330");
 
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
+        glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1014,6 +1014,13 @@ int main()
             }
             ImGui::SameLine();
             ImGui::Text("cleared: %d", cleared_last);
+            auto filled = game.filled_planes();
+            ImGui::Text("filled layers: %s", filled.empty() ? "none" : "");
+            for (int y : filled)
+            {
+                ImGui::SameLine();
+                ImGui::Text("[%d]", y);
+            }
         }
         ImGui::End();
 

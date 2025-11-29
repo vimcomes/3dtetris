@@ -256,6 +256,28 @@ void Game::debug_fill_plane(int y, const Vec3& color)
     rebuild_locked_cache();
 }
 
+std::vector<int> Game::filled_planes() const
+{
+    std::vector<int> planes;
+    for (int y = 0; y < well_.height(); ++y)
+    {
+        bool full = true;
+        for (int z = 0; z < well_.depth() && full; ++z)
+        {
+            for (int x = 0; x < well_.width(); ++x)
+            {
+                if (well_.is_free(Vec3i{x, y, z}))
+                {
+                    full = false;
+                    break;
+                }
+            }
+        }
+        if (full) planes.push_back(y);
+    }
+    return planes;
+}
+
 void Game::update(float dt)
 {
     if (!active_)
