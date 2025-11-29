@@ -425,8 +425,6 @@ int main()
     RepeatState move_x_neg, move_x_pos, move_z_neg, move_z_pos;
 
     bool wireframe_active = false;
-    float brightness = 1.0f;
-    float color_boost = 1.0f;
     bool rotating = false;
     struct RmbState
     {
@@ -436,7 +434,6 @@ int main()
         double last_y = 0.0;
     } rmb;
     double last_mouse_x = 0.0;
-    double last_mouse_y = 0.0;
     bool dock_built = false;
     struct ViewportRect { float x0 = 0.f, y0 = 0.f, x1 = static_cast<float>(start_width), y1 = static_cast<float>(start_height); } viewport_rect;
 
@@ -511,12 +508,10 @@ int main()
             {
                 rotating = true;
                 last_mouse_x = mx;
-                last_mouse_y = my;
             }
             double dx = mx - last_mouse_x;
             yaw += static_cast<float>(dx) * 0.005f;
             last_mouse_x = mx;
-            last_mouse_y = my;
         }
         else
         {
@@ -725,11 +720,10 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 glScissor(vx, vy, vw, vh);
                 auto apply_tone = [&](const Vec3& c)
                 {
-                    float gain = std::max(brightness * color_boost, 0.1f);
                     return Vec3{
-                        std::clamp(c.x * gain, 0.0f, 1.0f),
-                        std::clamp(c.y * gain, 0.0f, 1.0f),
-                        std::clamp(c.z * gain, 0.0f, 1.0f)};
+                        std::clamp(c.x, 0.0f, 1.0f),
+                        std::clamp(c.y, 0.0f, 1.0f),
+                        std::clamp(c.z, 0.0f, 1.0f)};
                 };
                 Vec3 clear{0.0f, 0.0f, 0.0f};
                 glClearColor(clear.x, clear.y, clear.z, 1.0f);
@@ -963,11 +957,10 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 glScissor(vx, vy, vw, vh);
                 auto apply_tone = [&](const Vec3& c)
                 {
-                    float gain = std::max(brightness * color_boost, 0.1f);
                     return Vec3{
-                        std::clamp(c.x * gain, 0.0f, 1.0f),
-                        std::clamp(c.y * gain, 0.0f, 1.0f),
-                        std::clamp(c.z * gain, 0.0f, 1.0f)};
+                        std::clamp(c.x, 0.0f, 1.0f),
+                        std::clamp(c.y, 0.0f, 1.0f),
+                        std::clamp(c.z, 0.0f, 1.0f)};
                 };
                 Vec3 clear{0.0f, 0.0f, 0.0f};
                 glClearColor(clear.x, clear.y, clear.z, 1.0f);
@@ -1078,8 +1071,6 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         {
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
-            ImGui::SliderFloat("Brightness", &brightness, 0.8f, 3.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::SliderFloat("Color boost", &color_boost, 1.0f, 4.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Well size");
             ImGui::SliderInt("Width", &desired_width, 5, 12);
