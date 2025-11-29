@@ -3,11 +3,15 @@
 #include <iostream>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
 
 #include "game.h"
 #include "geometry.h"
@@ -263,150 +267,6 @@ std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cel
     return out;
 }
 
-struct Glyph
-{
-    std::array<std::string, 7> rows{};
-};
-
-Glyph make_glyph(std::initializer_list<const char*> rows)
-{
-    Glyph g{};
-    size_t i = 0;
-    for (auto* r : rows)
-    {
-        g.rows[i++] = r;
-    }
-    return g;
-}
-
-const std::unordered_map<char, Glyph> kGlyphs = {
-    {'A', make_glyph({" ### ", "#   #", "#   #", "#####", "#   #", "#   #", "....."})},
-    {'B', make_glyph({"#### ", "#   #", "#### ", "#   #", "#   #", "#### ", "....."})},
-    {'C', make_glyph({" ### ", "#   #", "#    ", "#    ", "#   #", " ### ", "....."})},
-    {'D', make_glyph({"#### ", "#   #", "#   #", "#   #", "#   #", "#### ", "....."})},
-    {'E', make_glyph({"#####", "#    ", "#### ", "#    ", "#    ", "#####", "....."})},
-    {'F', make_glyph({"#####", "#    ", "#### ", "#    ", "#    ", "#    ", "....."})},
-    {'G', make_glyph({" ### ", "#   #", "#    ", "# ###", "#   #", " ### ", "....."})},
-    {'H', make_glyph({"#   #", "#   #", "#####", "#   #", "#   #", "#   #", "....."})},
-    {'I', make_glyph({"#####", "  #  ", "  #  ", "  #  ", "  #  ", "#####", "....."})},
-    {'J', make_glyph({"#####", "   # ", "   # ", "   # ", "#  # ", " ##  ", "....."})},
-    {'K', make_glyph({"#   #", "#  # ", "###  ", "#  # ", "#   #", "#   #", "....."})},
-    {'L', make_glyph({"#    ", "#    ", "#    ", "#    ", "#    ", "#####", "....."})},
-    {'M', make_glyph({"#   #", "## ##", "# # #", "#   #", "#   #", "#   #", "....."})},
-    {'N', make_glyph({"#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "....."})},
-    {'O', make_glyph({" ### ", "#   #", "#   #", "#   #", "#   #", " ### ", "....."})},
-    {'P', make_glyph({"#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "....."})},
-    {'Q', make_glyph({" ### ", "#   #", "#   #", "#   #", "#  ##", " ####", "....."})},
-    {'R', make_glyph({"#### ", "#   #", "#   #", "#### ", "#  # ", "#   #", "....."})},
-    {'S', make_glyph({" ####", "#    ", "#    ", " ### ", "    #", "#### ", "....."})},
-    {'T', make_glyph({"#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "....."})},
-    {'U', make_glyph({"#   #", "#   #", "#   #", "#   #", "#   #", " ### ", "....."})},
-    {'V', make_glyph({"#   #", "#   #", "#   #", "#   #", " # # ", "  #  ", "....."})},
-    {'W', make_glyph({"#   #", "#   #", "# # #", "# # #", "## ##", "#   #", "....."})},
-    {'X', make_glyph({"#   #", " # # ", "  #  ", "  #  ", " # # ", "#   #", "....."})},
-    {'Y', make_glyph({"#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  ", "....."})},
-    {'Z', make_glyph({"#####", "   # ", "  #  ", "  #  ", " #   ", "#####", "....."})},
-    {'0', make_glyph({" ### ", "#  ##", "# # #", "# # #", "##  #", " ### ", "....."})},
-    {'1', make_glyph({"  #  ", " ##  ", "  #  ", "  #  ", "  #  ", " ### ", "....."})},
-    {'2', make_glyph({" ### ", "#   #", "   # ", "  #  ", " #   ", "#####", "....."})},
-    {'3', make_glyph({" ### ", "#   #", "   # ", "  ## ", "    #", " ### ", "....."})},
-    {'4', make_glyph({"#  # ", "#  # ", "#  # ", "#####", "   # ", "   # ", "....."})},
-    {'5', make_glyph({"#####", "#    ", "#### ", "    #", "#   #", " ### ", "....."})},
-    {'6', make_glyph({" ### ", "#    ", "#### ", "#   #", "#   #", " ### ", "....."})},
-    {'7', make_glyph({"#####", "    #", "   # ", "  #  ", "  #  ", "  #  ", "....."})},
-    {'8', make_glyph({" ### ", "#   #", " ### ", "#   #", "#   #", " ### ", "....."})},
-    {'9', make_glyph({" ### ", "#   #", "#   #", " ####", "    #", " ### ", "....."})},
-    {':', make_glyph({".....", "  #  ", ".....", ".....", "  #  ", ".....", "....."})},
-    {'/', make_glyph({"    #", "   # ", "   # ", "  #  ", "  #  ", " #   ", "#    "})},
-    {'-', make_glyph({".....", ".....", "#####", ".....", ".....", ".....", "....."})},
-    {' ', make_glyph({".....", ".....", ".....", ".....", ".....", ".....", "....."})},
-};
-
-std::vector<float> build_text_quads(const std::string& text, float x, float y, float scale, const Vec3& color)
-{
-    std::vector<float> out;
-    float cursor_x = x;
-    float cursor_y = y;
-    const float glyph_w = 5.f * scale;
-    const float glyph_h = 7.f * scale;
-    const float spacing = scale * 1.2f;
-
-    for (char ch_raw : text)
-    {
-        char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch_raw)));
-        if (ch == '\n')
-        {
-            cursor_x = x;
-            cursor_y -= (glyph_h + spacing);
-            continue;
-        }
-        auto it = kGlyphs.find(ch);
-        const Glyph* g = (it != kGlyphs.end()) ? &it->second : &kGlyphs.at(' ');
-        for (int row = 0; row < 7; ++row)
-        {
-            for (int col = 0; col < 5; ++col)
-            {
-                if ((*g).rows[row][col] != '#')
-                {
-                    continue;
-                }
-                float x0 = cursor_x + col * scale;
-                float y0 = cursor_y - row * scale;
-                float x1 = x0 + scale;
-                float y1 = y0 - scale;
-                out.insert(out.end(), {
-                    x0, y0, 0.f, color.x, color.y, color.z,
-                    x1, y0, 0.f, color.x, color.y, color.z,
-                    x1, y1, 0.f, color.x, color.y, color.z,
-                    x0, y0, 0.f, color.x, color.y, color.z,
-                    x1, y1, 0.f, color.x, color.y, color.z,
-                    x0, y1, 0.f, color.x, color.y, color.z,
-                });
-            }
-        }
-        cursor_x += glyph_w + spacing;
-    }
-    return out;
-}
-
-std::vector<float> build_panel_quad(float left, float right, float top, float bottom, const Vec3& color)
-{
-    return {
-        left,  top,    0.f, color.x, color.y, color.z,
-        right, top,    0.f, color.x, color.y, color.z,
-        right, bottom, 0.f, color.x, color.y, color.z,
-        left,  top,    0.f, color.x, color.y, color.z,
-        right, bottom, 0.f, color.x, color.y, color.z,
-        left,  bottom, 0.f, color.x, color.y, color.z,
-    };
-}
-
-std::vector<float> build_checkbox_lines(float x, float y, float size, bool checked)
-{
-    // x,y in NDC (top-left anchor), size in NDC units.
-    float x0 = x;
-    float y0 = y;
-    float x1 = x + size;
-    float y1 = y - size;
-    std::vector<float> data;
-    auto push = [&](float xa, float ya, float xb, float yb, const float col[3])
-    {
-        data.insert(data.end(), {xa, ya, 0.f, col[0], col[1], col[2],
-                                 xb, yb, 0.f, col[0], col[1], col[2]});
-    };
-    float border[3] = {0.7f, 0.7f, 0.7f};
-    float mark[3] = {0.2f, 0.9f, 0.4f};
-    push(x0, y0, x1, y0, border);
-    push(x1, y0, x1, y1, border);
-    push(x1, y1, x0, y1, border);
-    push(x0, y1, x0, y0, border);
-    if (checked)
-    {
-        push(x0 + 0.2f * size, y - 0.5f * size, x0 + 0.45f * size, y1 + 0.15f * size, mark);
-        push(x0 + 0.45f * size, y1 + 0.15f * size, x1 - 0.15f * size, y + 0.15f * size, mark);
-    }
-    return data;
-}
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -472,6 +332,14 @@ int main()
         glfwTerminate();
         return EXIT_FAILURE;
     }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -556,6 +424,7 @@ int main()
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
+    bool dock_built = false;
 
     std::cout << "Controls:\n"
                  "  Mouse drag: rotate view around vertical axis\n"
@@ -576,6 +445,26 @@ int main()
         float dt = static_cast<float>(now - prev_time);
         prev_time = now;
 
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        ImGuiDockNodeFlags dock_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+        ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dock_flags);
+        if (!dock_built)
+        {
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, dock_flags | ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, io.DisplaySize);
+            ImGuiID right_id = 0;
+            ImGuiID left_id = dockspace_id;
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.32f, &right_id, &left_id);
+            ImGui::DockBuilderDockWindow("Controls", right_id);
+            ImGui::DockBuilderDockWindow("Viewport", left_id);
+            ImGui::DockBuilderFinish(dockspace_id);
+            dock_built = true;
+        }
+
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -584,7 +473,7 @@ int main()
         // Mouse orbit around vertical axis.
         double mx = 0.0, my = 0.0;
         glfwGetCursorPos(window, &mx, &my);
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        if (!io.WantCaptureMouse && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             if (!rotating)
             {
@@ -604,11 +493,11 @@ int main()
 
         // Camera anchored top-down with slight tilt; allow mild zoom and pitch adjust.
         const float zoom_speed = 6.0f;
-        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) distance = std::max(6.0f, distance - zoom_speed * dt);
-        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) distance = std::min(40.0f, distance + zoom_speed * dt);
+        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) distance = std::max(6.0f, distance - zoom_speed * dt);
+        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) distance = std::min(40.0f, distance + zoom_speed * dt);
         const float tilt_speed = 1.5f;
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitch = std::min(to_radians(88.0f), pitch + tilt_speed * dt);
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitch = std::max(to_radians(40.0f), pitch - tilt_speed * dt);
+        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitch = std::min(to_radians(88.0f), pitch + tilt_speed * dt);
+        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitch = std::max(to_radians(40.0f), pitch - tilt_speed * dt);
 
         // Piece input with edge detection for rotations/drop.
         auto is_down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
@@ -621,27 +510,27 @@ int main()
         bool space_now = is_down(GLFW_KEY_SPACE);
         bool f_now = is_down(GLFW_KEY_F);
 
-        if (left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
         {
             spin = {true, Axis::Y, -1, 0.f, 0.15f};
         }
-        if (right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
         {
             spin = {true, Axis::Y, 1, 0.f, 0.15f};
         }
-        if (up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
         {
             spin = {true, Axis::X, -1, 0.f, 0.15f};
         }
-        if (down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
+        if (!io.WantCaptureKeyboard && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 0.15f};
         }
-        if (z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 0.15f};
         }
-        if (x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 0.15f};
         }
@@ -663,17 +552,20 @@ int main()
             }
         };
 
-        handle_repeat(is_down(GLFW_KEY_J), move_x_neg, [&] { game.move_active(-1, 0); });
-        handle_repeat(is_down(GLFW_KEY_L), move_x_pos, [&] { game.move_active(1, 0); });
-        handle_repeat(is_down(GLFW_KEY_I), move_z_neg, [&] { game.move_active(0, -1); });
-        handle_repeat(is_down(GLFW_KEY_K), move_z_pos, [&] { game.move_active(0, 1); });
+        if (!io.WantCaptureKeyboard)
+        {
+            handle_repeat(is_down(GLFW_KEY_J), move_x_neg, [&] { game.move_active(-1, 0); });
+            handle_repeat(is_down(GLFW_KEY_L), move_x_pos, [&] { game.move_active(1, 0); });
+            handle_repeat(is_down(GLFW_KEY_I), move_z_neg, [&] { game.move_active(0, -1); });
+            handle_repeat(is_down(GLFW_KEY_K), move_z_pos, [&] { game.move_active(0, 1); });
+        }
 
-        if (space_now && !prev_keys.space)
+        if (!io.WantCaptureKeyboard && space_now && !prev_keys.space)
         {
             game.hard_drop();
             spin.active = false;
         }
-        if (f_now && !prev_keys.f)
+        if (!io.WantCaptureKeyboard && f_now && !prev_keys.f)
         {
             wireframe_active = !wireframe_active;
         }
@@ -682,187 +574,201 @@ int main()
 
         game.update(dt);
 
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+        ImGuiWindowFlags viewport_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        if (ImGui::Begin("Viewport", nullptr, viewport_flags))
+        {
+            ImVec2 content_min = ImGui::GetWindowContentRegionMin();
+            ImVec2 content_max = ImGui::GetWindowContentRegionMax();
+            ImVec2 window_pos = ImGui::GetWindowPos();
+            ImVec2 viewport_pos{window_pos.x + content_min.x, window_pos.y + content_min.y};
+            ImVec2 viewport_size{content_max.x - content_min.x, content_max.y - content_min.y};
+
+            if (viewport_size.x > 0.f && viewport_size.y > 0.f)
+            {
+                int fb_width = 1;
+                int fb_height = 1;
+                glfwGetFramebufferSize(window, &fb_width, &fb_height);
+                ImVec2 fb_scale = io.DisplayFramebufferScale;
+                int vx = static_cast<int>(viewport_pos.x * fb_scale.x);
+                int vy = static_cast<int>((io.DisplaySize.y - viewport_pos.y - viewport_size.y) * fb_scale.y);
+                int vw = static_cast<int>(viewport_size.x * fb_scale.x);
+                int vh = static_cast<int>(viewport_size.y * fb_scale.y);
+
+                glViewport(vx, vy, vw, vh);
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(vx, vy, vw, vh);
+                glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                float cy = std::cos(yaw);
+                float sy = std::sin(yaw);
+                float cp = std::cos(pitch);
+                float sp = std::sin(pitch);
+                Vec3 eye{distance * sy * cp, distance * sp, distance * cy * cp};
+                Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                float aspect = viewport_size.x / viewport_size.y;
+
+                Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);
+                Mat4 mvp_world = multiply(proj, view);
+
+                glUseProgram(program);
+
+                auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
+                {
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, tint.x, tint.y, tint.z);
+                    glUniform1f(u_alpha_loc, alpha);
+                    glBindVertexArray(mesh.vao);
+                    glDrawArrays(mesh.mode, 0, mesh.count);
+                };
+                auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
+                {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    draw_mesh_mvp(mesh, mvp, tint, alpha);
+                };
+
+                draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+                draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
+
+                if (spin.active)
+                {
+                    spin.t += dt;
+                    if (spin.t >= spin.duration)
+                    {
+                        spin.active = false;
+                    }
+                }
+
+                // Active piece with simple spin animation.
+                if (const auto& p = game.active_piece())
+                {
+                    glDisable(GL_CULL_FACE); // allow both sides for translucent active piece
+                    glDepthMask(GL_FALSE); // allow seeing locked blocks through translucent active piece.
+                    Vec3 pivot{0.f, 0.f, 0.f};
+                    for (const auto& b : p->blocks)
+                    {
+                        Vec3i c{p->pos.x + b.x, p->pos.y + b.y, p->pos.z + b.z};
+                        Vec3 world = game.well().cell_center(c, cell_size);
+                        pivot.x += world.x;
+                        pivot.y += world.y;
+                        pivot.z += world.z;
+                    }
+                    float inv = 1.0f / static_cast<float>(p->blocks.size());
+                    pivot.x *= inv;
+                    pivot.y *= inv;
+                    pivot.z *= inv;
+
+                    float spin_angle = 0.0f;
+                    if (spin.active)
+                    {
+                        float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
+                        float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
+                        spin_angle = remaining * -sign * to_radians(90.0f);
+                    }
+
+                    float fall_offset = 0.0f;
+                    if (game.active_can_fall())
+                    {
+                        fall_offset = game.fall_progress() * cell_size;
+                    }
+
+                    auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
+                    auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
+                    update_mesh(active_mesh, piece_vertices);
+                    update_mesh(active_edges, edge_vertices);
+
+                    Mat4 model = translation(pivot);
+                    if (spin.active && spin_angle != 0.0f)
+                    {
+                        if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
+                        else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
+                        else model = multiply(model, rotation_z(spin_angle));
+                    }
+                    model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
+                    if (fall_offset > 0.0f)
+                    {
+                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
+                    }
+
+                    if (wireframe_active)
+                    {
+                        draw_mesh(active_edges, model, p->color, 0.9f);
+                    }
+                    else
+                    {
+                        draw_mesh(active_mesh, model, p->color, 0.45f);
+                    }
+                    glDepthMask(GL_TRUE);
+                    glEnable(GL_CULL_FACE);
+                }
+
+                // Ghost projection on landing spot (wireframe, low alpha).
+                if (const auto ghost = game.ghost_piece())
+                {
+                    auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
+                    update_mesh(active_edges, ghost_edges);
+                    glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
+                    draw_mesh(active_edges, identity(), Vec3{0.65f, 0.7f, 0.75f}, 0.22f);
+                    glDepthMask(GL_TRUE);
+                    glEnable(GL_CULL_FACE);
+                }
+
+                // Locked cells.
+                const auto& locked_positions = game.locked_cells();
+                const auto& locked_colors = game.locked_colors();
+                for (size_t i = 0; i < locked_positions.size(); ++i)
+                {
+                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                    Mat4 model = translation(world);
+                    Mat4 mvp = multiply(mvp_world, model);
+                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(u_tint_loc, locked_colors[i].x, locked_colors[i].y, locked_colors[i].z);
+                    glUniform1f(u_alpha_loc, 1.0f);
+                    glBindVertexArray(cube_mesh.vao);
+                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                }
+
+                glBindVertexArray(0);
+                glDisable(GL_SCISSOR_TEST);
+            }
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
+
+        if (ImGui::Begin("Controls"))
+        {
+            ImGui::TextUnformatted("Render");
+            ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
+            ImGui::Separator();
+            ImGui::TextUnformatted("Controls");
+            ImGui::BulletText("Mouse drag: orbit");
+            ImGui::BulletText("W/S: tilt");
+            ImGui::BulletText("Q/E: zoom");
+            ImGui::BulletText("Arrows/Z/X: rotate");
+            ImGui::BulletText("I/K/J/L: move");
+            ImGui::BulletText("Space: hard drop");
+            ImGui::BulletText("F: toggle wireframe");
+            ImGui::BulletText("Esc: quit");
+        }
+        ImGui::End();
+
+        ImGui::Render();
         int fb_width = 1;
         int fb_height = 1;
         glfwGetFramebufferSize(window, &fb_width, &fb_height);
         glViewport(0, 0, fb_width, fb_height);
-
-        float cy = std::cos(yaw);
-        float sy = std::sin(yaw);
-        float cp = std::cos(pitch);
-        float sp = std::sin(pitch);
-        Vec3 eye{distance * sy * cp, distance * sp, distance * cy * cp};
-        Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
-        // Keep well cross-section square: render into centered square viewport.
-        int side = std::min(fb_width, fb_height);
-        int xoff = (fb_width - side) / 2;
-        int yoff = (fb_height - side) / 2;
-        glViewport(xoff, yoff, side, side);
-        float aspect = 1.0f;
-
-        Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);
-        Mat4 mvp_world = multiply(proj, view);
-
-        glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        glUseProgram(program);
-
-    auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
-        {
-            glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-            glUniform3f(u_tint_loc, tint.x, tint.y, tint.z);
-            glUniform1f(u_alpha_loc, alpha);
-            glBindVertexArray(mesh.vao);
-            glDrawArrays(mesh.mode, 0, mesh.count);
-        };
-        auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
-        {
-            Mat4 mvp = multiply(mvp_world, model);
-            draw_mesh_mvp(mesh, mvp, tint, alpha);
-        };
-
-        draw_mesh(bottom_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-        draw_mesh(floor_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-        draw_mesh(walls_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-
-        if (spin.active)
-        {
-            spin.t += dt;
-            if (spin.t >= spin.duration)
-            {
-                spin.active = false;
-            }
-        }
-
-        // Active piece with simple spin animation.
-        if (const auto& p = game.active_piece())
-        {
-            glDisable(GL_CULL_FACE); // allow both sides for translucent active piece
-            glDepthMask(GL_FALSE); // allow seeing locked blocks through translucent active piece.
-            Vec3 pivot{0.f, 0.f, 0.f};
-            for (const auto& b : p->blocks)
-            {
-                Vec3i c{p->pos.x + b.x, p->pos.y + b.y, p->pos.z + b.z};
-                Vec3 world = game.well().cell_center(c, cell_size);
-                pivot.x += world.x;
-                pivot.y += world.y;
-                pivot.z += world.z;
-            }
-            float inv = 1.0f / static_cast<float>(p->blocks.size());
-            pivot.x *= inv;
-            pivot.y *= inv;
-            pivot.z *= inv;
-
-            float spin_angle = 0.0f;
-            if (spin.active)
-            {
-                float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
-                float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
-                spin_angle = remaining * -sign * to_radians(90.0f);
-            }
-
-            float fall_offset = 0.0f;
-            if (game.active_can_fall())
-            {
-                fall_offset = game.fall_progress() * cell_size;
-            }
-
-            auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
-            auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
-            update_mesh(active_mesh, piece_vertices);
-            update_mesh(active_edges, edge_vertices);
-
-            Mat4 model = translation(pivot);
-            if (spin.active && spin_angle != 0.0f)
-            {
-                if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
-                else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
-                else model = multiply(model, rotation_z(spin_angle));
-            }
-            model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
-            if (fall_offset > 0.0f)
-            {
-                model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
-            }
-
-            if (wireframe_active)
-            {
-                draw_mesh(active_edges, model, p->color, 0.9f);
-            }
-            else
-            {
-                draw_mesh(active_mesh, model, p->color, 0.45f);
-            }
-            glDepthMask(GL_TRUE);
-            glEnable(GL_CULL_FACE);
-        }
-
-        // Ghost projection on landing spot (wireframe, low alpha).
-        if (const auto ghost = game.ghost_piece())
-        {
-            auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
-            update_mesh(active_edges, ghost_edges);
-            glDisable(GL_CULL_FACE);
-            glDepthMask(GL_FALSE);
-            draw_mesh(active_edges, identity(), Vec3{0.65f, 0.7f, 0.75f}, 0.22f);
-            glDepthMask(GL_TRUE);
-            glEnable(GL_CULL_FACE);
-        }
-
-        // Locked cells.
-        const auto& locked_positions = game.locked_cells();
-        const auto& locked_colors = game.locked_colors();
-        for (size_t i = 0; i < locked_positions.size(); ++i)
-        {
-            Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-            Mat4 model = translation(world);
-            Mat4 mvp = multiply(mvp_world, model);
-            glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-            glUniform3f(u_tint_loc, locked_colors[i].x, locked_colors[i].y, locked_colors[i].z);
-            glUniform1f(u_alpha_loc, 1.0f);
-            glBindVertexArray(cube_mesh.vao);
-            glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
-        }
-
-        glBindVertexArray(0);
-        // UI overlay panel on the right.
-        glViewport(0, 0, fb_width, fb_height);
-        float panel_left = 0.55f;
-        float panel_right = 0.98f;
-        float panel_top = 0.92f;
-        float panel_bottom = -0.92f;
-        std::vector<float> panel = build_panel_quad(panel_left, panel_right, panel_top, panel_bottom, Vec3{0.06f, 0.08f, 0.12f});
-        update_mesh(active_mesh, panel);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-        draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 0.85f);
-
-        // Checkbox.
-        std::vector<float> checkbox = build_checkbox_lines(panel_left + 0.03f, panel_top - 0.03f, 0.05f, wireframe_active);
-        update_mesh(active_mesh, checkbox);
-        draw_mesh_mvp(active_mesh, identity(), wireframe_active ? Vec3{0.2f, 0.9f, 0.4f} : Vec3{0.7f, 0.7f, 0.7f}, 1.0f);
-
-        // Text lines.
-        std::string text =
-            "F: WIREFRAME\n"
-            "SPACE: HARD DROP\n"
-            "ARROWS/Z/X: ROTATE\n"
-            "I/K/J/L: MOVE\n"
-            "MOUSE DRAG: ORBIT\n"
-            "Q/E: ZOOM\n"
-            "W/S: TILT\n"
-            "ESC: QUIT";
-        auto text_mesh = build_text_quads(text, panel_left + 0.1f, panel_top - 0.07f, 0.015f, Vec3{0.8f, 0.85f, 0.9f});
-        update_mesh(active_mesh, text_mesh);
-        draw_mesh_mvp(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 1.0f);
-
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_DEPTH_TEST);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     destroy_mesh(cube_mesh);
     destroy_mesh(floor_mesh);
