@@ -368,7 +368,8 @@ int main()
         out vec4 FragColor;
         void main()
         {
-            FragColor = vec4(vColor, uAlpha);
+            vec3 srgb = pow(vColor, vec3(1.0/2.2));
+            FragColor = vec4(srgb, uAlpha);
         }
     )";
 
