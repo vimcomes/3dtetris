@@ -421,7 +421,7 @@ int main()
     RepeatState move_x_neg, move_x_pos, move_z_neg, move_z_pos;
 
     bool wireframe_active = false;
-    float brightness = 1.3f;
+    float brightness = 1.6f;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -711,11 +711,11 @@ int main()
 
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, p->color, 0.9f);
+                        draw_mesh(active_edges, model, p->color, 0.95f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.45f);
+                        draw_mesh(active_mesh, model, p->color, 0.6f);
                     }
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
@@ -728,7 +728,7 @@ int main()
                     update_mesh(active_edges, ghost_edges);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    draw_mesh(active_edges, identity(), Vec3{0.65f, 0.7f, 0.75f}, 0.22f);
+                    draw_mesh(active_edges, identity(), Vec3{0.7f, 0.75f, 0.8f}, 0.3f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                 }

@@ -87,13 +87,13 @@ Game::Game(int w, int d, int h) : well_(w, d, h)
     };
 
     shape_colors_ = {
-        Vec3{0.3f, 0.85f, 0.95f},
-        Vec3{0.95f, 0.85f, 0.15f},
-        Vec3{0.75f, 0.35f, 0.9f},
-        Vec3{0.95f, 0.55f, 0.2f},
-        Vec3{0.2f, 0.55f, 0.95f},
-        Vec3{0.35f, 0.9f, 0.45f},
-        Vec3{0.9f, 0.3f, 0.3f},
+        Vec3{0.4f, 0.95f, 1.0f},
+        Vec3{1.0f, 0.92f, 0.3f},
+        Vec3{0.86f, 0.4f, 1.0f},
+        Vec3{1.0f, 0.65f, 0.25f},
+        Vec3{0.3f, 0.65f, 1.0f},
+        Vec3{0.45f, 1.0f, 0.6f},
+        Vec3{1.0f, 0.4f, 0.4f},
     };
 
     rng_.seed(std::random_device{}());
