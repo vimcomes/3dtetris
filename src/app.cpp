@@ -422,6 +422,7 @@ int main()
 
     bool wireframe_active = false;
     float brightness = 1.6f;
+    float color_boost = 1.2f;
     bool rotating = false;
     double last_mouse_x = 0.0;
     double last_mouse_y = 0.0;
@@ -603,13 +604,13 @@ int main()
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(vx, vy, vw, vh);
-                auto apply_brightness = [&](const Vec3& c)
+                auto apply_tone = [&](const Vec3& c)
                 {
                     float exposure = std::max(brightness, 0.05f);
                     Vec3 v{
-                        1.0f - std::exp(-std::clamp(c.x, 0.0f, 1.0f) * exposure),
-                        1.0f - std::exp(-std::clamp(c.y, 0.0f, 1.0f) * exposure),
-                        1.0f - std::exp(-std::clamp(c.z, 0.0f, 1.0f) * exposure),
+                        1.0f - std::exp(-std::clamp(c.x * color_boost, 0.0f, 5.0f) * exposure),
+                        1.0f - std::exp(-std::clamp(c.y * color_boost, 0.0f, 5.0f) * exposure),
+                        1.0f - std::exp(-std::clamp(c.z * color_boost, 0.0f, 5.0f) * exposure),
                     };
                     return v;
                 };
@@ -632,7 +633,7 @@ int main()
 
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
-                    Vec3 t = apply_brightness(tint);
+                    Vec3 t = apply_tone(tint);
                     glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
                     glUniform3f(u_tint_loc, t.x, t.y, t.z);
                     glUniform1f(u_alpha_loc, alpha);
@@ -760,6 +761,7 @@ int main()
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::SliderFloat("Exposure", &brightness, 0.5f, 6.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Color boost", &color_boost, 0.5f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
             ImGui::BulletText("Mouse drag: orbit");
