@@ -681,8 +681,8 @@ int main()
             auto_play.plan = {};
             if (const auto& p = game.active_piece())
             {
-                // Simple heuristic: minimize max height and holes.
-                struct Candidate { std::vector<Vec3i> blocks; Vec3i pos; int rot_x; int rot_y; int rot_z; float score; };
+                // Heuristic: minimize height/holes, maximize filled planes.
+                struct Candidate { std::vector<Vec3i> blocks; Vec3i pos; int rot_x; int rot_y; int rot_z; float score; int clears; };
                 std::vector<Candidate> cands;
                 auto active_blocks = p->blocks;
                 // Generate rotations (limited set to keep simple).
@@ -718,15 +718,68 @@ int main()
                                 else break;
                             }
                             if (!game.can_place_public(test)) continue;
-                            // Score: lower height and fewer overlaps in same column.
-                            int max_h = 0;
-                            for (auto& b : test.blocks)
+                            // Evaluate placement.
+                            int w = game.well().width();
+                            int d = game.well().depth();
+                            int h = game.well().height();
+                            std::vector<uint8_t> occ(w * d * h, 0);
+                            auto idx3 = [&](int x, int y, int z){ return y * d * w + z * w + x; };
+                            const auto& cells = game.well().cells();
+                            for (int yy = 0; yy < h; ++yy)
                             {
-                                int h = test.pos.y + b.y;
-                                max_h = std::max(max_h, h);
+                                for (int zz = 0; zz < d; ++zz)
+                                {
+                                    for (int xx = 0; xx < w; ++xx)
+                                    {
+                                        if (!game.well().is_free(Vec3i{xx, yy, zz}))
+                                        {
+                                            occ[idx3(xx, yy, zz)] = 1;
+                                        }
+                                    }
+                                }
                             }
-                            float score = static_cast<float>(max_h);
-                            cands.push_back({rb, test.pos, rot[0], rot[1], rot[2], score});
+                            for (auto b : test.blocks)
+                            {
+                                int xx = test.pos.x + b.x;
+                                int yy = test.pos.y + b.y;
+                                int zz = test.pos.z + b.z;
+                                if (xx >=0 && xx < w && yy >=0 && yy < h && zz >=0 && zz < d)
+                                    occ[idx3(xx, yy, zz)] = 1;
+                            }
+                            // Full planes count.
+                            int full_planes = 0;
+                            for (int yy = 0; yy < h; ++yy)
+                            {
+                                bool full = true;
+                                for (int zz = 0; zz < d && full; ++zz)
+                                    for (int xx = 0; xx < w; ++xx)
+                                        if (!occ[idx3(xx, yy, zz)]) { full = false; break; }
+                                if (full) full_planes++;
+                            }
+                            // Holes per column.
+                            int holes = 0;
+                            int max_h = 0;
+                            for (int zz = 0; zz < d; ++zz)
+                            {
+                                for (int xx = 0; xx < w; ++xx)
+                                {
+                                    bool filled_seen = false;
+                                    for (int yy = h - 1; yy >= 0; --yy)
+                                    {
+                                        if (occ[idx3(xx, yy, zz)])
+                                        {
+                                            filled_seen = true;
+                                            max_h = std::max(max_h, yy);
+                                        }
+                                        else if (filled_seen)
+                                        {
+                                            holes++;
+                                        }
+                                    }
+                                }
+                            }
+                            float score = max_h * 10.0f + holes * 30.0f - full_planes * 200.0f;
+                            cands.push_back({rb, test.pos, rot[0], rot[1], rot[2], score, full_planes});
                         }
                     }
                 }
@@ -734,10 +787,10 @@ int main()
                 {
                     auto best = *std::min_element(cands.begin(), cands.end(), [](const Candidate& a, const Candidate& b){return a.score < b.score;});
                     std::vector<std::function<void()>> plan;
-                    // Apply rotations
-                    if (best.rot_x != 0) plan.push_back([&game](){game.rotate_active(Axis::X, 1);});
-                    if (best.rot_y != 0) plan.push_back([&game](){game.rotate_active(Axis::Y, 1);});
-                    if (best.rot_z != 0) plan.push_back([&game](){game.rotate_active(Axis::Z, 1);});
+                    // Apply rotations with correct sign (limited to -1/0/1).
+                    if (best.rot_x != 0) plan.push_back([&game, rx=best.rot_x](){game.rotate_active(Axis::X, rx);});
+                    if (best.rot_y != 0) plan.push_back([&game, ry=best.rot_y](){game.rotate_active(Axis::Y, ry);});
+                    if (best.rot_z != 0) plan.push_back([&game, rz=best.rot_z](){game.rotate_active(Axis::Z, rz);});
                     // Move to target x/z
                     if (const auto& cur = game.active_piece())
                     {
