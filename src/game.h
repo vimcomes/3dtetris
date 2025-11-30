@@ -53,7 +53,7 @@ private:
 class Game
 {
 public:
-    Game(int w, int d, int h);
+    Game(int w, int d, int h, std::vector<Vec3> shape_colors = {}, float fall_interval = 1.2f);
 
     void update(float dt);
     bool rotate_active(Axis axis, int dir);

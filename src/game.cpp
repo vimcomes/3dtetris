@@ -75,7 +75,7 @@ Vec3 Well::cell_center(const Vec3i& c, float cell_size) const
                 min_z + (c.z + 0.5f) * cell_size};
 }
 
-Game::Game(int w, int d, int h) : well_(w, d, h)
+Game::Game(int w, int d, int h, std::vector<Vec3> shape_colors, float fall_interval) : well_(w, d, h)
 {
     shapes_ = {
         // I
@@ -107,8 +107,16 @@ Game::Game(int w, int d, int h) : well_(w, d, h)
         Vec3{1.0f, 0.0f, 0.8f},  // magenta
         Vec3{0.0f, 1.0f, 0.6f},  // aqua green
     };
+    if (shape_colors.size() == shape_colors_.size())
+    {
+        shape_colors_ = shape_colors;
+    }
 
     rng_.seed(std::random_device{}());
+    if (fall_interval > 0.f)
+    {
+        fall_interval_ = fall_interval;
+    }
     active_ = spawn_piece();
 }
 

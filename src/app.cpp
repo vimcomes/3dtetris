@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -19,6 +21,7 @@
 #include "game_ai.h"
 #include "geometry.h"
 #include "math.h"
+#include "config.h"
 #include "render.h"
 
 namespace
@@ -357,14 +360,26 @@ int main()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_FRAMEBUFFER_SRGB);
 
+    auto pick_config_path = []()
+    {
+        namespace fs = std::filesystem;
+        std::vector<std::string> candidates = {"config.toml", "../config.toml"};
+        for (const auto& p : candidates)
+        {
+            if (fs::exists(p)) return p;
+        }
+        return candidates.front();
+    };
+
+    AppConfig config = load_config(pick_config_path());
     RenderShader shader = create_render_shader();
-    RenderPalette palette = default_render_palette();
+    RenderPalette palette = config.palette;
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
 
-    int well_width = 10;
-    int well_depth = 10;
-    int well_height = 20;
+    int well_width = config.well_width;
+    int well_depth = config.well_depth;
+    int well_height = config.well_height;
     const float cell_size = 1.0f;
 
     auto floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
@@ -376,9 +391,11 @@ int main()
     float yaw = 0.0f;
     float pitch = to_radians(89.0f);
     float distance = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
+    bool needs_reframe = true;
+    ImVec2 prev_viewport_size{-1.f, -1.f};
     double prev_time = glfwGetTime();
 
-    Game game{well_width, well_depth, well_height};
+    Game game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
     struct Spin
     {
         bool active = false;
@@ -481,6 +498,7 @@ int main()
         double mx = 0.0, my = 0.0;
         glfwGetCursorPos(window, &mx, &my);
         bool in_viewport = mx >= viewport_rect.x0 && mx <= viewport_rect.x1 && my >= viewport_rect.y0 && my <= viewport_rect.y1;
+        bool viewport_hot = in_viewport || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow);
         if (in_viewport && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             if (!rotating)
@@ -549,27 +567,27 @@ int main()
         bool a_now = is_down(GLFW_KEY_A);
         bool d_now = is_down(GLFW_KEY_D);
 
-        if (!io.WantCaptureKeyboard && in_viewport && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
         {
             spin = {true, Axis::Y, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && in_viewport && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
         {
             spin = {true, Axis::Y, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && in_viewport && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
         {
             spin = {true, Axis::X, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && in_viewport && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && in_viewport && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && in_viewport && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 0.15f};
         }
@@ -593,18 +611,18 @@ int main()
 
         if (!io.WantCaptureKeyboard)
         {
-            handle_repeat((is_down(GLFW_KEY_J) || a_now) && in_viewport, move_x_neg, [&] { game.move_active(-1, 0); });
-            handle_repeat((is_down(GLFW_KEY_L) || d_now) && in_viewport, move_x_pos, [&] { game.move_active(1, 0); });
-            handle_repeat(is_down(GLFW_KEY_I) && in_viewport, move_z_neg, [&] { game.move_active(0, -1); });
-            handle_repeat(is_down(GLFW_KEY_K) && in_viewport, move_z_pos, [&] { game.move_active(0, 1); });
+            handle_repeat((is_down(GLFW_KEY_J) || a_now) && viewport_hot, move_x_neg, [&] { game.move_active(-1, 0); });
+            handle_repeat((is_down(GLFW_KEY_L) || d_now) && viewport_hot, move_x_pos, [&] { game.move_active(1, 0); });
+            handle_repeat(is_down(GLFW_KEY_I) && viewport_hot, move_z_neg, [&] { game.move_active(0, -1); });
+            handle_repeat(is_down(GLFW_KEY_K) && viewport_hot, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
-    if (!io.WantCaptureKeyboard && space_now && !prev_keys.space)
+    if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space)
     {
         game.hard_drop();
         spin.active = false;
     }
-        if (!io.WantCaptureKeyboard && in_viewport && f_now && !prev_keys.f)
+        if (!io.WantCaptureKeyboard && viewport_hot && f_now && !prev_keys.f)
         {
             wireframe_active = !wireframe_active;
         }
@@ -683,6 +701,12 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImVec2 viewport_size{content_max.x - content_min.x, content_max.y - content_min.y};
             viewport_rect = {viewport_pos.x, viewport_pos.y, viewport_pos.x + viewport_size.x, viewport_pos.y + viewport_size.y};
 
+            if (viewport_size.x != prev_viewport_size.x || viewport_size.y != prev_viewport_size.y)
+            {
+                needs_reframe = true;
+                prev_viewport_size = viewport_size;
+            }
+
             if (viewport_size.x > 0.f && viewport_size.y > 0.f)
             {
                 int fb_width = 1;
@@ -711,6 +735,63 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 float sy = std::sin(yaw);
                 float cp = std::cos(pitch);
                 float sp = std::sin(pitch);
+                if (needs_reframe)
+                {
+                    auto ndc_max_for_distance = [&](float test_distance)
+                    {
+                        float cy_t = std::cos(yaw);
+                        float sy_t = std::sin(yaw);
+                        float cp_t = std::cos(pitch);
+                        float sp_t = std::sin(pitch);
+                        Vec3 eye_t{test_distance * sy_t * cp_t, test_distance * sp_t, test_distance * cy_t * cp_t};
+                        Mat4 view_t = look_at(eye_t, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                        float aspect = viewport_size.x / viewport_size.y;
+                        Mat4 proj_t = perspective(60.0f, aspect, 0.1f, 200.0f);
+                        Mat4 mvp_t = multiply(proj_t, view_t);
+                        auto clip_ndc = [&](const Vec3& p)
+                        {
+                            float x = mvp_t.m[0] * p.x + mvp_t.m[4] * p.y + mvp_t.m[8] * p.z + mvp_t.m[12];
+                            float y = mvp_t.m[1] * p.x + mvp_t.m[5] * p.y + mvp_t.m[9] * p.z + mvp_t.m[13];
+                            float w = mvp_t.m[3] * p.x + mvp_t.m[7] * p.y + mvp_t.m[11] * p.z + mvp_t.m[15];
+                            if (std::abs(w) < 1e-4f) w = 1e-4f;
+                            return std::max(std::abs(x / w), std::abs(y / w));
+                        };
+                        float half_w = 0.5f * static_cast<float>(well_width) * cell_size;
+                        float half_d = 0.5f * static_cast<float>(well_depth) * cell_size;
+                        float top_y = static_cast<float>(well_height) * cell_size;
+                        std::array<Vec3, 4> corners = {{
+                            {-half_w, top_y, -half_d},
+                            { half_w, top_y, -half_d},
+                            { half_w, top_y,  half_d},
+                            {-half_w, top_y,  half_d},
+                        }};
+                        float max_ndc = 0.f;
+                        for (const auto& c : corners)
+                        {
+                            max_ndc = std::max(max_ndc, clip_ndc(c));
+                        }
+                        return max_ndc;
+                    };
+
+                    float target = 0.9f;
+                    float lo = 1.0f;
+                    float hi = 200.0f;
+                    for (int i = 0; i < 24; ++i)
+                    {
+                        float mid = 0.5f * (lo + hi);
+                        float ndc = ndc_max_for_distance(mid);
+                        if (ndc > target)
+                        {
+                            lo = mid; // too big on screen, pull back
+                        }
+                        else
+                        {
+                            hi = mid; // too small, push closer
+                        }
+                    }
+                    distance = hi;
+                    needs_reframe = false;
+                }
                 Vec3 eye{distance * sy * cp, distance * sp, distance * cy * cp};
                 Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
                 float aspect = viewport_size.x / viewport_size.y;
@@ -1065,7 +1146,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
                 walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
                 bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
-                game = Game{well_width, well_depth, well_height};
+                game = Game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
                 spin = {};
                 auto_play = {};
                 yaw = 0.0f;
