@@ -831,7 +831,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
                 draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(iso_walls_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
 
                 // Active piece with simple spin animation (render on top).
                 if (const auto& p = game.active_piece())
@@ -1132,7 +1132,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
                 draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(iso_walls_mesh, identity(), palette.grid, 1.0f);
 
                 if (const auto& p = game.active_piece())
                 {

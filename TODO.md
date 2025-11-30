@@ -22,5 +22,8 @@ Next steps toward a full game
 - Packaging: Build presets for Win/macOS/Linux; consider vendoring deps instead of FetchContent for release.
 
 2025-11-30 session notes
-- Session log: ~/.codex/sessions/2025/11/30/rollout-2025-11-30T10-55-04-*.jsonl (this session)
+- Session log: ~/.codex/sessions/2025/11/30/rollout-2025-11-30T19-04-46-019ad5b9-5cb4-74a1-8c28-af4efc9981e0.jsonl (this session)
 - Rendering: Shaders/palette moved to render.cpp/h; fragment shader outputs color directly (no pow), sRGB enabled. ImGui backgrounds transparent to keep GL clear black. Active piece wireframe draws in white; active piece alpha now 1.0.
+- Config: Added config.toml loader; palette, shapes, well size, fall interval come from file (with defaults/fallback). Paths checked from build dir too.
+- Pieces/logic: Added dot (1x1x1) and short bar (1x1x2) shapes; default well 6x6x20, width/depth clamped to even 6..10. Gravity interval configurable.
+- Cameras/UI: Auto-framing for main/iso viewports on resize and size changes. Keyboard works on hover/focus without initial click. Iso view hides near walls to see inside.
