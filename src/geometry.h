@@ -119,6 +119,49 @@ inline std::vector<float> build_well_outline_lines(int width, int depth, int hei
     return data;
 }
 
+inline std::vector<float> build_well_outline_lines_culled(int width, int depth, int height, float cell)
+{
+    // Same as build_well_outline_lines, but drop the two faces closest to the isometric camera (+X and +Z).
+    std::vector<float> data;
+    float color[3] = {0.0f, 1.0f, 0.0f};
+    float min_x = -0.5f * width * cell;
+    float min_z = -0.5f * depth * cell;
+    float max_x = 0.5f * width * cell;
+    float max_z = 0.5f * depth * cell;
+    float h = height * cell;
+
+    // Keep only corners on far faces (x = min_x or z = min_z).
+    std::array<Vec3, 4> corners = {{
+        {min_x, 0.f, min_z},
+        {max_x, 0.f, min_z},
+        {min_x, 0.f, max_z},
+        {max_x, 0.f, max_z},
+    }};
+    for (const auto& c : corners)
+    {
+        if (c.x == max_x && c.z == max_z) continue; // drop near-most corner
+        if (c.x == max_x && c.z == min_z) continue; // drop +X edge
+        if (c.x == min_x && c.z == max_z) continue; // drop +Z edge
+        data.insert(data.end(), {c.x, 0.f, c.z, color[0], color[1], color[2],
+                                 c.x, h, c.z, color[0], color[1], color[2]});
+    }
+
+    // Horizontal rings along far edges only (x = min_x or z = min_z).
+    const int ring_step = 2;
+    for (int level = ring_step; level <= height; level += ring_step)
+    {
+        float y = level * cell;
+        // Back edge (-Z)
+        data.insert(data.end(), {min_x, y, min_z, color[0], color[1], color[2],
+                                 max_x, y, min_z, color[0], color[1], color[2]});
+        // Left edge (-X)
+        data.insert(data.end(), {min_x, y, min_z, color[0], color[1], color[2],
+                                 min_x, y, max_z, color[0], color[1], color[2]});
+    }
+
+    return data;
+}
+
 inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
 {
     float min_x = -0.5f * width * cell;

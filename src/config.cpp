@@ -22,7 +22,11 @@ AppConfig default_config()
         Vec3{1.0f, 0.75f, 0.0f}, // J: orange/yellow
         Vec3{1.0f, 0.0f, 0.8f},  // S: magenta
         Vec3{0.0f, 1.0f, 0.6f},  // Z: aqua green
+        Vec3{0.9f, 0.9f, 0.9f},  // Dot 1x1x1
+        Vec3{0.5f, 0.7f, 1.0f},  // Bar2 1x1x2
     };
+    cfg.well_width = 6;
+    cfg.well_depth = 6;
     return cfg;
 }
 
@@ -146,9 +150,9 @@ AppConfig load_config(const std::string& path)
         }
         else if (section == "shapes")
         {
-            static const char* names[] = {"I", "O", "T", "L", "J", "S", "Z"};
+            static const char* names[] = {"I", "O", "T", "L", "J", "S", "Z", "Dot", "Bar2"};
             int idx = -1;
-            for (int i = 0; i < 7; ++i)
+            for (int i = 0; i < 9; ++i)
             {
                 if (key == names[i])
                 {
@@ -161,10 +165,6 @@ AppConfig load_config(const std::string& path)
                 Vec3 v{};
                 if (parse_vec3(value, v))
                 {
-                    if (static_cast<size_t>(idx) >= cfg.shape_colors.size())
-                    {
-                        cfg.shape_colors.resize(idx + 1, Vec3{1.f, 1.f, 1.f});
-                    }
                     cfg.shape_colors[idx] = v;
                 }
             }
@@ -192,9 +192,9 @@ AppConfig load_config(const std::string& path)
     }
 
     // Guard against truncated shape arrays.
-    if (cfg.shape_colors.size() < 7)
+    if (cfg.shape_colors.size() < 9)
     {
-        cfg.shape_colors.resize(7, Vec3{1.f, 1.f, 1.f});
+        cfg.shape_colors.resize(9, Vec3{1.f, 1.f, 1.f});
     }
     return cfg;
 }

@@ -372,18 +372,28 @@ int main()
     };
 
     AppConfig config = load_config(pick_config_path());
+    auto clamp_width_depth = [](int v)
+    {
+        int clamped = std::clamp(v, 6, 10);
+        if (clamped % 2 != 0)
+        {
+            clamped = (clamped < 10) ? (clamped + 1) : (clamped - 1);
+        }
+        return clamped;
+    };
     RenderShader shader = create_render_shader();
     RenderPalette palette = config.palette;
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
 
-    int well_width = config.well_width;
-    int well_depth = config.well_depth;
-    int well_height = config.well_height;
+    int well_width = clamp_width_depth(config.well_width);
+    int well_depth = clamp_width_depth(config.well_depth);
+    int well_height = std::clamp(config.well_height, 12, 30);
     const float cell_size = 1.0f;
 
     auto floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
     auto walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
+    auto iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
     auto bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
     GlMesh active_mesh = make_empty_mesh();
     GlMesh active_edges = make_empty_mesh(GL_LINES);
@@ -393,6 +403,9 @@ int main()
     float distance = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
     bool needs_reframe = true;
     ImVec2 prev_viewport_size{-1.f, -1.f};
+    float dist_iso = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
+    bool iso_needs_reframe = true;
+    ImVec2 iso_prev_size{-1.f, -1.f};
     double prev_time = glfwGetTime();
 
     Game game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
@@ -818,7 +831,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
                 draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(iso_walls_mesh, identity(), palette.grid, 1.0f);
 
                 // Active piece with simple spin animation (render on top).
                 if (const auto& p = game.active_piece())
@@ -997,6 +1010,11 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImVec2 iso_size{content_max.x - content_min.x, content_max.y - content_min.y};
             if (iso_size.x > 0.f && iso_size.y > 0.f)
             {
+                if (iso_size.x != iso_prev_size.x || iso_size.y != iso_prev_size.y)
+                {
+                    iso_needs_reframe = true;
+                    iso_prev_size = iso_size;
+                }
                 int fb_width = 1;
                 int fb_height = 1;
                 glfwGetFramebufferSize(window, &fb_width, &fb_height);
@@ -1026,7 +1044,66 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 float yaw_iso = to_radians(45.0f);
                 float pitch_iso = to_radians(65.0f);
-                float dist_iso = std::max(24.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
+                if (iso_needs_reframe)
+                {
+                    auto ndc_max_for_distance = [&](float test_distance)
+                    {
+                        float cy_t = std::cos(yaw_iso);
+                        float sy_t = std::sin(yaw_iso);
+                        float cp_t = std::cos(pitch_iso);
+                        float sp_t = std::sin(pitch_iso);
+                        Vec3 eye_t{test_distance * sy_t * cp_t, test_distance * sp_t, test_distance * cy_t * cp_t};
+                        float center_y_t = static_cast<float>(game.well().height()) * cell_size * 0.5f;
+                        Mat4 view_t = look_at(eye_t, Vec3{0.f, center_y_t, 0.f}, Vec3{0.f, 1.f, 0.f});
+                        Mat4 proj_t = perspective(55.0f, 1.0f, 0.1f, 200.0f);
+                        Mat4 mvp_t = multiply(proj_t, view_t);
+                        auto clip_ndc = [&](const Vec3& p)
+                        {
+                            float x = mvp_t.m[0] * p.x + mvp_t.m[4] * p.y + mvp_t.m[8] * p.z + mvp_t.m[12];
+                            float y = mvp_t.m[1] * p.x + mvp_t.m[5] * p.y + mvp_t.m[9] * p.z + mvp_t.m[13];
+                            float w = mvp_t.m[3] * p.x + mvp_t.m[7] * p.y + mvp_t.m[11] * p.z + mvp_t.m[15];
+                            if (std::abs(w) < 1e-4f) w = 1e-4f;
+                            return std::max(std::abs(x / w), std::abs(y / w));
+                        };
+                        float half_w = 0.5f * static_cast<float>(well_width) * cell_size;
+                        float half_d = 0.5f * static_cast<float>(well_depth) * cell_size;
+                        float top_y = static_cast<float>(well_height) * cell_size;
+                        std::array<Vec3, 8> corners = {{
+                            {-half_w, 0.f, -half_d},
+                            { half_w, 0.f, -half_d},
+                            { half_w, 0.f,  half_d},
+                            {-half_w, 0.f,  half_d},
+                            {-half_w, top_y, -half_d},
+                            { half_w, top_y, -half_d},
+                            { half_w, top_y,  half_d},
+                            {-half_w, top_y,  half_d},
+                        }};
+                        float max_ndc = 0.f;
+                        for (const auto& c : corners)
+                        {
+                            max_ndc = std::max(max_ndc, clip_ndc(c));
+                        }
+                        return max_ndc;
+                    };
+                    float target = 0.85f;
+                    float lo = 1.0f;
+                    float hi = 200.0f;
+                    for (int i = 0; i < 24; ++i)
+                    {
+                        float mid = 0.5f * (lo + hi);
+                        float ndc = ndc_max_for_distance(mid);
+                        if (ndc > target)
+                        {
+                            lo = mid;
+                        }
+                        else
+                        {
+                            hi = mid;
+                        }
+                    }
+                    dist_iso = hi;
+                    iso_needs_reframe = false;
+                }
                 float cy = std::cos(yaw_iso);
                 float sy = std::sin(yaw_iso);
                 float cp = std::cos(pitch_iso);
@@ -1131,8 +1208,10 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::Separator();
             ImGui::TextUnformatted("Well size");
-            ImGui::SliderInt("Width", &desired_width, 5, 12);
-            ImGui::SliderInt("Depth", &desired_depth, 5, 12);
+            ImGui::SliderInt("Width", &desired_width, 6, 10);
+            desired_width = clamp_width_depth(desired_width);
+            ImGui::SliderInt("Depth", &desired_depth, 6, 10);
+            desired_depth = clamp_width_depth(desired_depth);
             ImGui::SliderInt("Height", &desired_height, 12, 30);
             bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
             if (ImGui::Button("Apply size") && size_changed)
@@ -1145,6 +1224,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 destroy_mesh(bottom_mesh);
                 floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
                 walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
+                destroy_mesh(iso_walls_mesh);
+                iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
                 bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
                 game = Game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
                 spin = {};
@@ -1152,6 +1233,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 yaw = 0.0f;
                 pitch = to_radians(89.0f);
                 distance = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
+                needs_reframe = true;
+                iso_needs_reframe = true;
+                dist_iso = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
             }
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");

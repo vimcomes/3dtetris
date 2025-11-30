@@ -95,6 +95,10 @@ Game::Game(int w, int d, int h, std::vector<Vec3> shape_colors, float fall_inter
         {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{-1, 0, 1}},
         // Z
         {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}},
+        // Dot 1x1x1
+        {Vec3i{0, 0, 0}},
+        // Bar2 1x1x2 (vertical)
+        {Vec3i{0, 0, 0}, Vec3i{0, 1, 0}},
     };
 
     // Blockout-like neon palette: pure, high-saturation primaries.
@@ -106,6 +110,8 @@ Game::Game(int w, int d, int h, std::vector<Vec3> shape_colors, float fall_inter
         Vec3{1.0f, 0.75f, 0.0f}, // orange/yellow
         Vec3{1.0f, 0.0f, 0.8f},  // magenta
         Vec3{0.0f, 1.0f, 0.6f},  // aqua green
+        Vec3{0.9f, 0.9f, 0.9f},  // dot
+        Vec3{0.5f, 0.7f, 1.0f},  // bar2
     };
     if (shape_colors.size() == shape_colors_.size())
     {
