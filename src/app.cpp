@@ -19,7 +19,7 @@
 #include "game_ai.h"
 #include "geometry.h"
 #include "math.h"
-#include "shader.h"
+#include "render.h"
 
 namespace
 {
@@ -326,6 +326,7 @@ int main()
     }
 
     glfwMakeContextCurrent(window);
+    glfwFocusWindow(window);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
@@ -341,6 +342,11 @@ int main()
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
+    ImGuiStyle& style = ImGui::GetStyle();
+    // Keep UI backgrounds transparent; rely on GL clear for black.
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.Colors[ImGuiCol_ChildBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
@@ -349,37 +355,10 @@ int main()
     glCullFace(GL_BACK);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_FRAMEBUFFER_SRGB);
 
-    const char* vertex_shader = R"(
-        #version 330 core
-        layout(location = 0) in vec3 aPos;
-        layout(location = 1) in vec3 aColor;
-        uniform mat4 uMVP;
-        uniform vec3 uTint;
-        out vec3 vColor;
-        void main()
-        {
-            vColor = aColor * uTint;
-            gl_Position = uMVP * vec4(aPos, 1.0);
-        }
-    )";
-
-    const char* fragment_shader = R"(
-        #version 330 core
-        in vec3 vColor;
-        uniform float uAlpha;
-        out vec4 FragColor;
-        void main()
-        {
-            vec3 srgb = pow(vColor, vec3(1.0/2.2));
-            FragColor = vec4(srgb, uAlpha);
-        }
-    )";
-
-    GLuint program = create_program(vertex_shader, fragment_shader);
-    GLint u_mvp_loc = glGetUniformLocation(program, "uMVP");
-    GLint u_tint_loc = glGetUniformLocation(program, "uTint");
-    GLint u_alpha_loc = glGetUniformLocation(program, "uAlpha");
+    RenderShader shader = create_render_shader();
+    RenderPalette palette = default_render_palette();
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
 
@@ -725,8 +704,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         std::clamp(c.y, 0.0f, 1.0f),
                         std::clamp(c.z, 0.0f, 1.0f)};
                 };
-                Vec3 clear{0.0f, 0.0f, 0.0f};
-                glClearColor(clear.x, clear.y, clear.z, 1.0f);
+                glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 float cy = std::cos(yaw);
@@ -740,14 +718,14 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
-                glUseProgram(program);
+                glUseProgram(shader.program);
 
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
                     Vec3 t = apply_tone(tint);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
-                    glUniform1f(u_alpha_loc, alpha);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                    glUniform1f(shader.u_alpha, alpha);
                     glBindVertexArray(mesh.vao);
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
@@ -758,8 +736,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 };
 
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
-                draw_mesh(walls_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
 
                 // Active piece with simple spin animation (render on top).
                 if (const auto& p = game.active_piece())
@@ -801,11 +779,11 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, p->color, 0.95f);
+                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.85f);
+                        draw_mesh(active_mesh, model, p->color, 1.0f);
                     }
                     glDepthMask(GL_TRUE);
                     glEnable(GL_DEPTH_TEST);
@@ -833,9 +811,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Mat4 model = translation(world);
                     Mat4 mvp = multiply(mvp_world, model);
                     Vec3 t = apply_tone(locked_colors[i]);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
-                    glUniform1f(u_alpha_loc, 1.0f);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                    glUniform1f(shader.u_alpha, 1.0f);
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
@@ -847,9 +825,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
                     Mat4 model = translation(world);
                     Mat4 mvp = multiply(mvp_world, model);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, 0.92f, 0.95f, 0.98f);
-                    glUniform1f(u_alpha_loc, 1.0f);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
+                    glUniform1f(shader.u_alpha, 1.0f);
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
@@ -906,11 +884,11 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     glDisable(GL_CULL_FACE);
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, p->color, 0.95f);
+                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.85f);
+                        draw_mesh(active_mesh, model, p->color, 1.0f);
                     }
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
@@ -962,8 +940,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         std::clamp(c.y, 0.0f, 1.0f),
                         std::clamp(c.z, 0.0f, 1.0f)};
                 };
-                Vec3 clear{0.0f, 0.0f, 0.0f};
-                glClearColor(clear.x, clear.y, clear.z, 1.0f);
+                glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                 float yaw_iso = to_radians(45.0f);
@@ -979,13 +956,13 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 proj = perspective(55.0f, 1.0f, 0.1f, 120.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
-                glUseProgram(program);
+                glUseProgram(shader.program);
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
                     Vec3 t = apply_tone(tint);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
-                    glUniform1f(u_alpha_loc, alpha);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                    glUniform1f(shader.u_alpha, alpha);
                     glBindVertexArray(mesh.vao);
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
@@ -996,8 +973,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 };
 
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
-                draw_mesh(walls_mesh, identity(), Vec3{0.f, 1.f, 0.f}, 1.0f);
+                draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
 
                 if (const auto& p = game.active_piece())
                 {
@@ -1020,7 +997,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, p->color, 1.0f);
+                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
@@ -1039,9 +1016,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Mat4 model = translation(world);
                     Mat4 mvp = multiply(mvp_world, model);
                     Vec3 t = apply_tone(locked_colors[i]);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, t.x, t.y, t.z);
-                    glUniform1f(u_alpha_loc, 1.0f);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                    glUniform1f(shader.u_alpha, 1.0f);
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
@@ -1053,9 +1030,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
                     Mat4 model = translation(world);
                     Mat4 mvp = multiply(mvp_world, model);
-                    glUniformMatrix4fv(u_mvp_loc, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(u_tint_loc, 0.92f, 0.95f, 0.98f);
-                    glUniform1f(u_alpha_loc, 1.0f);
+                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                    glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
+                    glUniform1f(shader.u_alpha, 1.0f);
                     glBindVertexArray(cube_mesh.vao);
                     glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
                 }
@@ -1130,7 +1107,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     destroy_mesh(floor_mesh);
     destroy_mesh(walls_mesh);
     destroy_mesh(bottom_mesh);
-    glDeleteProgram(program);
+    destroy_render_shader(shader);
     glfwDestroyWindow(window);
     glfwTerminate();
     return EXIT_SUCCESS;
