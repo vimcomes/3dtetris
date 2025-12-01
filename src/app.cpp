@@ -281,9 +281,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 }
 
 static double g_scroll_delta = 0.0;
-void scroll_callback(GLFWwindow* /*window*/, double /*xoffset*/, double yoffset)
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     g_scroll_delta += yoffset;
+    ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
 }
 
 bool init_glfw()
@@ -359,6 +360,8 @@ int main()
     style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+    // Replace ImGui-installed scroll callback with our chaining version.
+    glfwSetScrollCallback(window, scroll_callback);
 
     glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
