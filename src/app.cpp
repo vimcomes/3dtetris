@@ -580,7 +580,7 @@ int main()
         const float zoom_speed = 3.0f;
         double scroll = g_scroll_delta;
         g_scroll_delta = 0.0;
-        if (scroll != 0.0 && !io.WantCaptureMouse)
+        if (scroll != 0.0)
         {
             distance = std::clamp(distance - static_cast<float>(scroll) * zoom_speed, 4.0f, 40.0f);
         }
