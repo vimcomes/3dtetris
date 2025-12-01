@@ -1111,7 +1111,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         }
                         return max_ndc;
                     };
-                    float target = 0.85f;
+                    float target = 0.92f;
                     float lo = 1.0f;
                     float hi = 200.0f;
                     for (int i = 0; i < 24; ++i)
