@@ -425,8 +425,9 @@ int main()
 
     struct KeyState
     {
-        bool left = false, right = false, up = false, down = false;
-        bool q = false, a = false;
+        bool rot_x_pos = false, rot_x_neg = false;
+        bool rot_y_pos = false, rot_y_neg = false;
+        bool rot_z_pos = false, rot_z_neg = false;
         bool space = false;
         bool f = false;
     } prev_keys;
@@ -598,27 +599,27 @@ int main()
         bool f_now = is_down(GLFW_KEY_F);
 
         // Rotations (Blockout-style)
-        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.up && game.rotate_active(Axis::X, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.rot_x_pos && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.down && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.rot_x_neg && game.rotate_active(Axis::X, -1))
         {
             spin = {true, Axis::X, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.left && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.rot_y_pos && game.rotate_active(Axis::Y, 1))
         {
             spin = {true, Axis::Y, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.right && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.rot_y_neg && game.rotate_active(Axis::Y, -1))
         {
             spin = {true, Axis::Y, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.q && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.rot_z_pos && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.a && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.rot_z_neg && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 0.15f};
         }
@@ -648,40 +649,40 @@ int main()
             handle_repeat(down_now && viewport_hot, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
-    if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space)
-    {
-        game.hard_drop();
-        spin.active = false;
-    }
+        if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space)
+        {
+            game.hard_drop();
+            spin.active = false;
+        }
         if (!io.WantCaptureKeyboard && viewport_hot && f_now && !prev_keys.f)
         {
             wireframe_active = !wireframe_active;
         }
 
-    prev_keys = {left_now, right_now, up_now, down_now, q_now, a_now, space_now, f_now};
+        prev_keys = {e_now, d_now, w_now, s_now, q_now, a_now, space_now, f_now};
 
-    game.update(dt);
-    if (spin.active)
-    {
-        spin.t += dt;
-        if (spin.t >= spin.duration)
+        game.update(dt);
+        if (spin.active)
         {
-            spin.active = false;
+            spin.t += dt;
+            if (spin.t >= spin.duration)
+            {
+                spin.active = false;
+            }
         }
-    }
 
-    float spin_angle = 0.0f;
-    if (spin.active)
-    {
-        float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
-        float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
-        spin_angle = remaining * -sign * to_radians(90.0f);
-    }
-    float fall_offset = 0.0f;
-    if (game.active_can_fall())
-    {
-        fall_offset = game.fall_progress() * cell_size;
-    }
+        float spin_angle = 0.0f;
+        if (spin.active)
+        {
+            float remaining = 1.0f - std::min(spin.t / spin.duration, 1.0f);
+            float sign = static_cast<float>(spin.dir >= 0 ? 1 : -1);
+            spin_angle = remaining * -sign * to_radians(90.0f);
+        }
+        float fall_offset = 0.0f;
+        if (game.active_can_fall())
+        {
+            fall_offset = game.fall_progress() * cell_size;
+        }
 
     if (auto_play.enabled && game.active_piece())
     {
