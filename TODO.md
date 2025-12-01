@@ -27,3 +27,9 @@ Next steps toward a full game
 - Config: Added config.toml loader; palette, shapes, well size, fall interval come from file (with defaults/fallback). Paths checked from build dir too.
 - Pieces/logic: Added dot (1x1x1) and short bar (1x1x2) shapes; default well 6x6x20, width/depth clamped to even 6..10. Gravity interval configurable.
 - Cameras/UI: Auto-framing for main/iso viewports on resize and size changes. Keyboard works on hover/focus without initial click. Iso view hides near walls to see inside.
+
+2025-12-01 session notes
+- Session log: ~/.codex/sessions/2025/12/01/rollout-2025-12-01T07-11-45-019ad852-f069-7283-94be-b4c748c03c55.jsonl (this session)
+- Presets: Default to Blockout basic (3x3x18), forms imported from Blockout (English comments), selectable sets basic/advanced/expert; fall_interval from config respected even under preset.
+- Shapes/logic: Pieces are data-driven from config; rotations use integer 3x3 matrices (no float drift); spawn centers via bounds; Blockout basic simplified to flat <=4 cubes.
+- Controls: Blockout-style rotations (E/D X, W/S Y, Q/A Z), movement on arrows, mouse wheel zoom fixed, camera and iso framing tightened; scroll callback chained to ImGui.
