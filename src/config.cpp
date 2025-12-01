@@ -140,11 +140,13 @@ std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& pars
         bool include = true;
         if (set == "basic")
         {
-            include = pf.z == 1; // только плоские
+            // Easiest set: only flat pieces and at most 4 cubes.
+            include = (pf.z == 1) && (cube_count <= 4);
         }
         else if (set == "advanced")
         {
-            include = cube_count >= 3; // без одиночных/пар, остальные включая 3D
+            // Everything except single/double cubes.
+            include = cube_count >= 3;
         }
         else
         {
