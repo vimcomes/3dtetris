@@ -1,65 +1,65 @@
-# muotojen lukumaara
+# number of forms
 32
 
-# ainoa muoto, jossa on yksi pala
-# kuutio
+# single-cube piece
+# cube
 1 1 1
 1
 0 0 0
 
-# ainoa muoto, jossa on kaksi palaa
-# pikku-I
+# two-cube piece
+# small I
 2 1 1
 1 1
 0 0 0
 
-# kolmipalaiset muodot (2 kpl)
-# iso-I
+# three-cube pieces (2)
+# long I
 3 1 1
 1 1 1
 1 0 0
-# kulmapala
+# corner 3-cube
 2 2 1
 1 1
 1 0
 0 0 0
 
-#nelipalaiset muodot (7 kpl)
-# L-pala
+# four-cube pieces (7)
+# L piece
 3 2 1
 1 1 1
 1 0 0
 1 0 0
-# pikku-t -pala
+# small T
 3 2 1
 1 1 1
 0 1 0
 1 0 0
-# nelio
+# square 2x2x1
 2 2 1
 1 1
 1 1
 0 0 0
-# s-pala
+# S piece
 3 2 1
 1 1 0
 0 1 1
 1 0 0
-#kolmikulmapala
+# triangular prism
 2 2 2
 1 1
 1 0
 1 0
 0 0
 0 0 0
-# vasen yläpala -kolmio
+# upper-left triangle
 2 2 2
 1 1
 1 0
 0 0
 1 0
 0 0 0
-# oikea yläpala -kolmio
+# upper-right triangle
 2 2 2
 1 1
 1 0
@@ -67,144 +67,144 @@
 0 0
 0 0 0
 
-# viisipalaiset muodot (21 kpl)
+# five-cube pieces (21)
 
-#tasaiset
-# U-pala
+# flat pieces
+# U piece
 3 2 1
 1 1 1
 1 0 1
 1 0 0
-# autopala
+# car piece
 3 2 1
 1 1 1
 1 1 0
 1 0 0
-# ristipala
+# cross
 3 3 1
 0 1 0
 1 1 1
 0 1 0
 1 1 0
-# T-pala
+# T piece
 3 3 1
 1 1 1
 0 1 0
 0 1 0
 1 1 0
-# iso kulmapala
+# big corner
 3 3 1
 1 1 1
 1 0 0 
 1 0 0
 1 1 0
-# siksak-pala
+# zigzag
 3 3 1
 0 1 1
 1 1 0
 1 0 0
 1 1 0
 
-# kolmeen suuntaan ulottuvat
-# kärsäpala
+# 3D protruding shapes
+# trunk piece
 3 2 2
 1 1 1
 0 0 0
 0 1 0
 0 1 0
 1 0 0
-# hilipala
+# hili piece
 3 2 2 
 0 1 1
 1 1 0
 0 1 0
 0 0 0
 1 0 0
-# käänteinen hilipala
+# inverted hili piece
 3 2 2
 1 1 0
 0 1 1
 0 1 0
 0 0 0
 1 0 0
-# kärsähilipala
+# trunk+hili piece
 3 2 2
 1 1 0
 0 1 1
 1 0 0
 0 0 0
 1 0 0
-# käänteinen kärsähilipala
+# inverted trunk+hili piece
 3 2 2
 0 1 1
 1 1 0
 0 0 1
 0 0 0
 1 0 0
-# reunakulmapala
+# edge corner
 3 2 2
 1 1 1
 0 1 0
 0 1 0
 0 0 0
 1 0 0
-# pitkä kulmapala
+# long corner
 3 2 2
 1 1 1
 1 0 0
 1 0 0
 0 0 0
 1 0 0
-# häröpala
+# weird piece
 3 2 2
 1 1 1
 1 0 0
 0 0 0
 1 0 0
 1 0 0
-# käänteinen häröpala
+# inverted weird piece
 3 2 2
 1 1 1
 0 0 1
 0 0 0
 0 0 1
 1 0 0
-# lt-pala
+# LT piece
 3 2 2
 1 1 1
 1 0 0
 0 1 0
 0 0 0
 1 0 0
-# käänteinen lt-pala
+# inverted LT piece
 3 2 2
 1 1 1
 0 0 1
 0 1 0
 0 0 0
 1 0 0
-# pupapala
+# pupa piece
 3 2 2
 1 1 1
 1 0 0
 0 0 1
 0 0 0
 1 0 0
-# käänteinen pupapala
+# inverted pupa piece
 3 2 2
 1 1 1
 0 0 1
 1 0 0
 0 0 0
 1 0 0
-# möhköpala
+# chunk 2x2x2 with nub
 2 2 2
 1 1
 1 1
 1 0
 0 0
 0 0 0
-# tv-pala
+# TV piece
 2 2 2
 1 1
 1 0
