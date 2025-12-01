@@ -29,4 +29,6 @@ fall_interval = 1.2
 # Пресет (modern|blockout). Для blockout используется data/forms_blockout.dat с центрами фигур, стакан 3x3x18, палитра/скорость как в Blockout.
 [preset]
 name = "blockout"
+# basic|advanced|expert
+blockout_set = "basic"
 # forms_path = "data/forms_blockout.dat"

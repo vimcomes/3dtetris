@@ -18,6 +18,7 @@ struct AppConfig
     std::vector<Vec3> shape_colors;
     std::vector<ShapeDef> shapes;
     std::string preset = "modern";
+    std::string blockout_set = "basic";
     std::string forms_path;
     int well_width = 10;
     int well_depth = 10;

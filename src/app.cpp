@@ -753,6 +753,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+                float center_y_view = static_cast<float>(well_height) * cell_size * 0.5f;
                 float cy = std::cos(yaw);
                 float sy = std::sin(yaw);
                 float cp = std::cos(pitch);
@@ -765,8 +766,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         float sy_t = std::sin(yaw);
                         float cp_t = std::cos(pitch);
                         float sp_t = std::sin(pitch);
-                        Vec3 eye_t{test_distance * sy_t * cp_t, test_distance * sp_t, test_distance * cy_t * cp_t};
-                        Mat4 view_t = look_at(eye_t, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                        Vec3 eye_t{test_distance * sy_t * cp_t, center_y_view + test_distance * sp_t, test_distance * cy_t * cp_t};
+                        Mat4 view_t = look_at(eye_t, Vec3{0.f, center_y_view, 0.f}, Vec3{0.f, 1.f, 0.f});
                         float aspect = viewport_size.x / viewport_size.y;
                         Mat4 proj_t = perspective(60.0f, aspect, 0.1f, 200.0f);
                         Mat4 mvp_t = multiply(proj_t, view_t);
@@ -781,7 +782,11 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         float half_w = 0.5f * static_cast<float>(well_width) * cell_size;
                         float half_d = 0.5f * static_cast<float>(well_depth) * cell_size;
                         float top_y = static_cast<float>(well_height) * cell_size;
-                        std::array<Vec3, 4> corners = {{
+                        std::array<Vec3, 8> corners = {{
+                            {-half_w, 0.f, -half_d},
+                            { half_w, 0.f, -half_d},
+                            { half_w, 0.f,  half_d},
+                            {-half_w, 0.f,  half_d},
                             {-half_w, top_y, -half_d},
                             { half_w, top_y, -half_d},
                             { half_w, top_y,  half_d},
@@ -795,7 +800,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         return max_ndc;
                     };
 
-                    float target = 0.9f;
+                    float target = 0.95f;
                     float lo = 1.0f;
                     float hi = 200.0f;
                     for (int i = 0; i < 24; ++i)
@@ -814,8 +819,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     distance = hi;
                     needs_reframe = false;
                 }
-                Vec3 eye{distance * sy * cp, distance * sp, distance * cy * cp};
-                Mat4 view = look_at(eye, Vec3{0.f, 0.f, 0.f}, Vec3{0.f, 1.f, 0.f});
+                Vec3 eye{distance * sy * cp, center_y_view + distance * sp, distance * cy * cp};
+                Mat4 view = look_at(eye, Vec3{0.f, center_y_view, 0.f}, Vec3{0.f, 1.f, 0.f});
                 float aspect = viewport_size.x / viewport_size.y;
 
                 Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);

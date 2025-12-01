@@ -126,7 +126,7 @@ std::vector<ParsedForm> read_blockout_forms(const std::filesystem::path& path)
     return forms;
 }
 
-std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& parsed, const std::vector<Vec3>& palette)
+std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& parsed, const std::vector<Vec3>& palette, const std::string& set)
 {
     std::vector<ShapeDef> defs;
     if (parsed.empty()) return defs;
@@ -134,6 +134,24 @@ std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& pars
     for (size_t i = 0; i < parsed.size(); ++i)
     {
         const auto& pf = parsed[i];
+        int cube_count = 0;
+        for (int v : pf.data) if (v != 0) ++cube_count;
+
+        bool include = true;
+        if (set == "basic")
+        {
+            include = pf.z == 1; // только плоские
+        }
+        else if (set == "advanced")
+        {
+            include = cube_count >= 3; // без одиночных/пар, остальные включая 3D
+        }
+        else
+        {
+            include = cube_count >= 1;
+        }
+        if (!include) continue;
+
         ShapeDef def;
         for (int z = 0; z < pf.z; ++z)
         {
@@ -149,7 +167,7 @@ std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& pars
                 }
             }
         }
-        def.color = palette.empty() ? Vec3{0.0f, 0.0f, 1.0f} : palette[i % palette.size()];
+        def.color = palette.empty() ? Vec3{0.0f, 0.0f, 1.0f} : palette[defs.size() % palette.size()];
         defs.push_back(std::move(def));
     }
     return defs;
@@ -175,6 +193,7 @@ AppConfig default_config()
     cfg.well_width = 6;
     cfg.well_depth = 6;
     cfg.preset = "blockout";
+    cfg.blockout_set = "basic";
     cfg.shapes = build_modern_shapes(cfg.shape_colors);
     return cfg;
 }
@@ -360,6 +379,14 @@ AppConfig load_config(const std::string& path)
                     cfg.forms_path = cfg.forms_path.substr(1, cfg.forms_path.size() - 2);
                 }
             }
+            else if (key == "blockout_set")
+            {
+                cfg.blockout_set = value;
+                if (!cfg.blockout_set.empty() && cfg.blockout_set.front() == '"' && cfg.blockout_set.back() == '"')
+                {
+                    cfg.blockout_set = cfg.blockout_set.substr(1, cfg.blockout_set.size() - 2);
+                }
+            }
         }
     }
 
@@ -403,7 +430,7 @@ AppConfig load_config(const std::string& path)
             }
         }
         auto parsed = read_blockout_forms(forms_path);
-        auto defs = convert_blockout_forms(parsed, blockout_colors);
+        auto defs = convert_blockout_forms(parsed, blockout_colors, cfg.blockout_set);
         if (!defs.empty())
         {
             cfg.shapes = std::move(defs);
