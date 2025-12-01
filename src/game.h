@@ -29,6 +29,15 @@ struct Piece
     Vec3 color{0.9f, 0.8f, 0.35f};
 };
 
+inline Vec3i apply_rot(const int R[3][3], const Vec3i& v)
+{
+    return Vec3i{
+        R[0][0] * v.x + R[0][1] * v.y + R[0][2] * v.z,
+        R[1][0] * v.x + R[1][1] * v.y + R[1][2] * v.z,
+        R[2][0] * v.x + R[2][1] * v.y + R[2][2] * v.z,
+    };
+}
+
 struct ShapeBounds
 {
     int min_x = 0, max_x = 0;

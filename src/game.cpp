@@ -53,15 +53,6 @@ const int ROT_Z_NEG[3][3] = {
     {0, 0, 1},
 };
 
-Vec3i apply_rot(const int R[3][3], const Vec3i& v)
-{
-    return Vec3i{
-        R[0][0] * v.x + R[0][1] * v.y + R[0][2] * v.z,
-        R[1][0] * v.x + R[1][1] * v.y + R[1][2] * v.z,
-        R[2][0] * v.x + R[2][1] * v.y + R[2][2] * v.z,
-    };
-}
-
 void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
 {
     for (int i = 0; i < 3; ++i)
