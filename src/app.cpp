@@ -374,11 +374,9 @@ int main()
     AppConfig config = load_config(pick_config_path());
     auto clamp_width_depth = [](int v)
     {
-        int clamped = std::clamp(v, 6, 10);
-        if (clamped % 2 != 0)
-        {
-            clamped = (clamped < 10) ? (clamped + 1) : (clamped - 1);
-        }
+        int clamped = std::clamp(v, 3, 10);
+        if (clamped < 6) return clamped; // allow narrow Blockout tube
+        if (clamped % 2 != 0) clamped = (clamped < 10) ? (clamped + 1) : (clamped - 1);
         return clamped;
     };
     RenderShader shader = create_render_shader();
@@ -408,7 +406,7 @@ int main()
     ImVec2 iso_prev_size{-1.f, -1.f};
     double prev_time = glfwGetTime();
 
-    Game game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
+    Game game{well_width, well_depth, well_height, config.shapes, config.fall_interval};
     struct Spin
     {
         bool active = false;
@@ -505,6 +503,17 @@ int main()
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+
+        // Clear whole framebuffer; ImGui windows are transparent and per-view clears are scissored.
+        {
+            int fb_width = 1;
+            int fb_height = 1;
+            glfwGetFramebufferSize(window, &fb_width, &fb_height);
+            glDisable(GL_SCISSOR_TEST);
+            glViewport(0, 0, fb_width, fb_height);
+            glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
 
         // Mouse orbit around vertical axis (only inside viewport area).
@@ -1208,9 +1217,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::Separator();
             ImGui::TextUnformatted("Well size");
-            ImGui::SliderInt("Width", &desired_width, 6, 10);
+            ImGui::SliderInt("Width", &desired_width, 3, 10);
             desired_width = clamp_width_depth(desired_width);
-            ImGui::SliderInt("Depth", &desired_depth, 6, 10);
+            ImGui::SliderInt("Depth", &desired_depth, 3, 10);
             desired_depth = clamp_width_depth(desired_depth);
             ImGui::SliderInt("Height", &desired_height, 12, 30);
             bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
@@ -1227,7 +1236,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 destroy_mesh(iso_walls_mesh);
                 iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
                 bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
-                game = Game{well_width, well_depth, well_height, config.shape_colors, config.fall_interval};
+                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval};
                 spin = {};
                 auto_play = {};
                 yaw = 0.0f;

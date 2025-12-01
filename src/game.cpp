@@ -75,47 +75,51 @@ Vec3 Well::cell_center(const Vec3i& c, float cell_size) const
                 min_z + (c.z + 0.5f) * cell_size};
 }
 
-Game::Game(int w, int d, int h, std::vector<Vec3> shape_colors, float fall_interval) : well_(w, d, h)
+Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interval) : well_(w, d, h)
 {
-    shapes_ = {
-        // I
-        {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{2, 0, 0}},
-        // O
-        {
-            Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1},
-            Vec3i{0, 1, 0}, Vec3i{1, 1, 0}, Vec3i{0, 1, 1}, Vec3i{1, 1, 1},
-        },
-        // T
-        {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}},
-        // L
-        {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{-1, 0, 1}},
-        // J
-        {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{1, 0, 0}, Vec3i{1, 0, 1}},
-        // S
-        {Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{-1, 0, 1}},
-        // Z
-        {Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}},
-        // Dot 1x1x1
-        {Vec3i{0, 0, 0}},
-        // Bar2 1x1x2 (vertical)
-        {Vec3i{0, 0, 0}, Vec3i{0, 1, 0}},
-    };
-
-    // Blockout-like neon palette: pure, high-saturation primaries.
-    shape_colors_ = {
-        Vec3{0.0f, 1.0f, 0.0f},  // green
-        Vec3{1.0f, 0.0f, 0.0f},  // red
-        Vec3{0.0f, 0.9f, 1.0f},  // cyan
-        Vec3{0.0f, 0.0f, 1.0f},  // blue
-        Vec3{1.0f, 0.75f, 0.0f}, // orange/yellow
-        Vec3{1.0f, 0.0f, 0.8f},  // magenta
-        Vec3{0.0f, 1.0f, 0.6f},  // aqua green
-        Vec3{0.9f, 0.9f, 0.9f},  // dot
-        Vec3{0.5f, 0.7f, 1.0f},  // bar2
-    };
-    if (shape_colors.size() == shape_colors_.size())
+    if (shapes.empty())
     {
-        shape_colors_ = shape_colors;
+        // Fallback to built-in modern shapes if nothing was loaded.
+        std::vector<Vec3> colors = {
+            Vec3{0.0f, 1.0f, 0.0f},  Vec3{1.0f, 0.0f, 0.0f},  Vec3{0.0f, 0.9f, 1.0f},
+            Vec3{0.0f, 0.0f, 1.0f},  Vec3{1.0f, 0.75f, 0.0f}, Vec3{1.0f, 0.0f, 0.8f},
+            Vec3{0.0f, 1.0f, 0.6f},  Vec3{0.9f, 0.9f, 0.9f}, Vec3{0.5f, 0.7f, 1.0f}};
+        shapes = {
+            {{Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{2, 0, 0}}, colors[0]},
+            {{
+                 Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1},
+                 Vec3i{0, 1, 0}, Vec3i{1, 1, 0}, Vec3i{0, 1, 1}, Vec3i{1, 1, 1},
+             },
+             colors[1]},
+            {{Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}}, colors[2]},
+            {{Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{-1, 0, 1}}, colors[3]},
+            {{Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{1, 0, 0}, Vec3i{1, 0, 1}}, colors[4]},
+            {{Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{-1, 0, 1}}, colors[5]},
+            {{Vec3i{0, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{0, 0, 1}, Vec3i{1, 0, 1}}, colors[6]},
+            {{Vec3i{0, 0, 0}}, colors[7]},
+            {{Vec3i{0, 0, 0}, Vec3i{0, 1, 0}}, colors[8]},
+        };
+    }
+
+    shapes_ = std::move(shapes);
+    bounds_.resize(shapes_.size());
+    for (size_t i = 0; i < shapes_.size(); ++i)
+    {
+        const auto& blocks = shapes_[i].blocks;
+        if (blocks.empty()) continue;
+        int min_x = blocks[0].x, max_x = blocks[0].x;
+        int min_y = blocks[0].y, max_y = blocks[0].y;
+        int min_z = blocks[0].z, max_z = blocks[0].z;
+        for (const auto& b : blocks)
+        {
+            min_x = std::min(min_x, b.x);
+            max_x = std::max(max_x, b.x);
+            min_y = std::min(min_y, b.y);
+            max_y = std::max(max_y, b.y);
+            min_z = std::min(min_z, b.z);
+            max_z = std::max(max_z, b.z);
+        }
+        bounds_[i] = ShapeBounds{min_x, max_x, min_y, max_y, min_z, max_z};
     }
 
     rng_.seed(std::random_device{}());
@@ -128,20 +132,31 @@ Game::Game(int w, int d, int h, std::vector<Vec3> shape_colors, float fall_inter
 
 Piece Game::spawn_piece()
 {
+    if (shapes_.empty())
+    {
+        return {};
+    }
     std::uniform_int_distribution<int> dist(0, static_cast<int>(shapes_.size() - 1));
     int shape = dist(rng_);
     Piece p;
     p.shape = shape;
-    p.blocks = shapes_[shape];
-    p.color = shape_colors_[shape];
-    int max_y = 0;
-    for (const auto& b : p.blocks)
-    {
-        if (b.y > max_y) max_y = b.y;
-    }
-    int start_y = well_.height() - 1 - max_y;
-    if (start_y < 0) start_y = 0;
-    p.pos = Vec3i{well_.width() / 2, start_y, well_.depth() / 2};
+    p.blocks = shapes_[shape].blocks;
+    p.color = shapes_[shape].color;
+
+    const auto& b = bounds_[shape];
+    int shape_w = b.max_x - b.min_x + 1;
+    int shape_d = b.max_z - b.min_z + 1;
+    int shape_h = b.max_y - b.min_y + 1;
+
+    int start_x = (well_.width() - shape_w) / 2 - b.min_x;
+    int start_z = (well_.depth() - shape_d) / 2 - b.min_z;
+    int start_y = well_.height() - shape_h - b.min_y;
+
+    start_x = std::max(0, start_x);
+    start_z = std::max(0, start_z);
+    start_y = std::max(0, start_y);
+
+    p.pos = Vec3i{start_x, start_y, start_z};
     return p;
 }
 

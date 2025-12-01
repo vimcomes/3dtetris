@@ -4,6 +4,7 @@
 #include <random>
 #include <vector>
 
+#include "config.h"
 #include "math.h"
 
 enum class Axis
@@ -25,6 +26,13 @@ struct Piece
     Vec3i pos{0, 0, 0};
     std::vector<Vec3i> blocks;
     Vec3 color{0.9f, 0.8f, 0.35f};
+};
+
+struct ShapeBounds
+{
+    int min_x = 0, max_x = 0;
+    int min_y = 0, max_y = 0;
+    int min_z = 0, max_z = 0;
 };
 
 class Well
@@ -53,7 +61,7 @@ private:
 class Game
 {
 public:
-    Game(int w, int d, int h, std::vector<Vec3> shape_colors = {}, float fall_interval = 1.2f);
+    Game(int w, int d, int h, std::vector<ShapeDef> shapes = {}, float fall_interval = 1.2f);
 
     void update(float dt);
     bool rotate_active(Axis axis, int dir);
@@ -76,8 +84,8 @@ public:
 private:
     Well well_;
     std::optional<Piece> active_;
-    std::vector<std::vector<Vec3i>> shapes_;
-    std::vector<Vec3> shape_colors_;
+    std::vector<ShapeDef> shapes_;
+    std::vector<struct ShapeBounds> bounds_;
     std::vector<Vec3i> locked_positions_;
     std::vector<Vec3> locked_colors_;
     float fall_timer_ = 0.0f;

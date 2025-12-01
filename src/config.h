@@ -6,10 +6,19 @@
 #include "math.h"
 #include "render.h"
 
+struct ShapeDef
+{
+    std::vector<Vec3i> blocks;
+    Vec3 color{};
+};
+
 struct AppConfig
 {
     RenderPalette palette{};
     std::vector<Vec3> shape_colors;
+    std::vector<ShapeDef> shapes;
+    std::string preset = "modern";
+    std::string forms_path;
     int well_width = 10;
     int well_depth = 10;
     int well_height = 20;
