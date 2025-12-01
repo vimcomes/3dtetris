@@ -870,7 +870,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Vec3 pivot{0.f, 0.f, 0.f};
                     for (const auto& b : p->blocks)
                     {
-                        Vec3i c{p->pos.x + b.x, p->pos.y + b.y, p->pos.z + b.z};
+                        Vec3i rb = apply_rot(p->rot, b);
+                        Vec3i c{p->pos.x + rb.x, p->pos.y + rb.y, p->pos.z + rb.z};
                         Vec3 world = game.well().cell_center(c, cell_size);
                         pivot.x += world.x;
                         pivot.y += world.y;
@@ -973,7 +974,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     Vec3 pivot{0.f, 0.f, 0.f};
                     for (const auto& b : p->blocks)
                     {
-                        Vec3i c{p->pos.x + b.x, p->pos.y + b.y, p->pos.z + b.z};
+                        Vec3i rb = apply_rot(p->rot, b);
+                        Vec3i c{p->pos.x + rb.x, p->pos.y + rb.y, p->pos.z + rb.z};
                         Vec3 world = game.well().cell_center(c, cell_size);
                         pivot.x += world.x;
                         pivot.y += world.y;
