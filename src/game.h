@@ -24,7 +24,8 @@ struct Piece
 {
     int shape = 0;
     Vec3i pos{0, 0, 0};
-    std::vector<Vec3i> blocks;
+    std::vector<Vec3i> blocks; // base offsets in local space
+    int rot[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     Vec3 color{0.9f, 0.8f, 0.35f};
 };
 

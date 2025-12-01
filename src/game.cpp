@@ -21,6 +21,72 @@ Vec3i rotate_block(const Vec3i& v, Axis axis, int dir)
     }
     return v;
 }
+
+const int ROT_X_POS[3][3] = {
+    {1, 0, 0},
+    {0, 0, -1},
+    {0, 1, 0},
+};
+const int ROT_X_NEG[3][3] = {
+    {1, 0, 0},
+    {0, 0, 1},
+    {0, -1, 0},
+};
+const int ROT_Y_POS[3][3] = {
+    {0, 0, 1},
+    {0, 1, 0},
+    {-1, 0, 0},
+};
+const int ROT_Y_NEG[3][3] = {
+    {0, 0, -1},
+    {0, 1, 0},
+    {1, 0, 0},
+};
+const int ROT_Z_POS[3][3] = {
+    {0, -1, 0},
+    {1, 0, 0},
+    {0, 0, 1},
+};
+const int ROT_Z_NEG[3][3] = {
+    {0, 1, 0},
+    {-1, 0, 0},
+    {0, 0, 1},
+};
+
+Vec3i apply_rot(const int R[3][3], const Vec3i& v)
+{
+    return Vec3i{
+        R[0][0] * v.x + R[0][1] * v.y + R[0][2] * v.z,
+        R[1][0] * v.x + R[1][1] * v.y + R[1][2] * v.z,
+        R[2][0] * v.x + R[2][1] * v.y + R[2][2] * v.z,
+    };
+}
+
+void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            int v = 0;
+            for (int k = 0; k < 3; ++k)
+            {
+                v += A[i][k] * B[k][j];
+            }
+            out[i][j] = v;
+        }
+    }
+    // Binarize to {-1,0,1} to avoid drift.
+    for (int i = 0; i < 3; ++i)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            if (out[i][j] > 0) out[i][j] = 1;
+            else if (out[i][j] < 0) out[i][j] = -1;
+            else out[i][j] = 0;
+        }
+    }
+}
 } // namespace
 
 Well::Well(int w, int d, int h) : width_(w), depth_(d), height_(h), cells_(w * d * h)
@@ -55,7 +121,8 @@ void Well::lock_piece(const Piece& p)
 {
     for (auto b : p.blocks)
     {
-        Vec3i c{p.pos.x + b.x, p.pos.y + b.y, p.pos.z + b.z};
+        Vec3i rb = apply_rot(p.rot, b);
+        Vec3i c{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z};
         if (!in_bounds(c))
         {
             continue;
@@ -141,6 +208,10 @@ Piece Game::spawn_piece()
     Piece p;
     p.shape = shape;
     p.blocks = shapes_[shape].blocks;
+    // Reset rotation matrix to identity.
+    p.rot[0][0] = 1; p.rot[0][1] = 0; p.rot[0][2] = 0;
+    p.rot[1][0] = 0; p.rot[1][1] = 1; p.rot[1][2] = 0;
+    p.rot[2][0] = 0; p.rot[2][1] = 0; p.rot[2][2] = 1;
     p.color = shapes_[shape].color;
 
     const auto& b = bounds_[shape];
@@ -164,7 +235,8 @@ bool Game::can_place(const Piece& p) const
 {
     for (auto b : p.blocks)
     {
-        Vec3i c{p.pos.x + b.x, p.pos.y + b.y, p.pos.z + b.z};
+        Vec3i rb = apply_rot(p.rot, b);
+        Vec3i c{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z};
         if (!well_.in_bounds(c))
         {
             return false;
@@ -337,9 +409,28 @@ bool Game::rotate_active(Axis axis, int dir)
         return false;
     }
     Piece rotated = *active_;
-    for (auto& b : rotated.blocks)
+    int tmp[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+    switch (axis)
     {
-        b = rotate_block(b, axis, dir);
+    case Axis::X:
+        if (dir >= 0) mul_rot(rotated.rot, ROT_X_POS, tmp);
+        else mul_rot(rotated.rot, ROT_X_NEG, tmp);
+        break;
+    case Axis::Y:
+        if (dir >= 0) mul_rot(rotated.rot, ROT_Y_POS, tmp);
+        else mul_rot(rotated.rot, ROT_Y_NEG, tmp);
+        break;
+    case Axis::Z:
+        if (dir >= 0) mul_rot(rotated.rot, ROT_Z_POS, tmp);
+        else mul_rot(rotated.rot, ROT_Z_NEG, tmp);
+        break;
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            rotated.rot[i][j] = tmp[i][j];
+        }
     }
     if (can_place(rotated))
     {

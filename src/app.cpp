@@ -149,7 +149,8 @@ std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell
     abs_blocks.reserve(p.blocks.size());
     for (auto b : p.blocks)
     {
-        abs_blocks.push_back(Vec3i{p.pos.x + b.x, p.pos.y + b.y, p.pos.z + b.z});
+        Vec3i rb = apply_rot(p.rot, b);
+        abs_blocks.push_back(Vec3i{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z});
     }
     auto has_block = [&](const Vec3i& q)
     {
@@ -184,7 +185,8 @@ std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cel
     abs_blocks.reserve(p.blocks.size());
     for (auto b : p.blocks)
     {
-        abs_blocks.push_back(Vec3i{p.pos.x + b.x, p.pos.y + b.y, p.pos.z + b.z});
+        Vec3i rb = apply_rot(p.rot, b);
+        abs_blocks.push_back(Vec3i{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z});
     }
     auto has_block = [&](const Vec3i& q)
     {
