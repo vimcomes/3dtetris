@@ -271,6 +271,7 @@ AppConfig load_config(const std::string& path)
 
     std::filesystem::path config_path = path;
     std::filesystem::path config_dir = config_path.parent_path();
+    bool fall_interval_explicit = false;
 
     std::ifstream file(path);
     if (!file.is_open())
@@ -358,7 +359,11 @@ AppConfig load_config(const std::string& path)
             {
                 continue;
             }
-            if (key == "fall_interval" && v > 0.f) cfg.fall_interval = v;
+            if (key == "fall_interval" && v > 0.f)
+            {
+                cfg.fall_interval = v;
+                fall_interval_explicit = true;
+            }
         }
         else if (section == "preset")
         {
@@ -408,7 +413,10 @@ AppConfig load_config(const std::string& path)
         cfg.palette.grid = Vec3{0.8f, 0.8f, 0.0f};
         cfg.palette.outline = Vec3{0.92f, 0.95f, 0.98f};
         cfg.palette.clear = Vec3{0.f, 0.f, 0.f};
-        cfg.fall_interval = 0.35f; // closer to their faster baseline
+        if (!fall_interval_explicit)
+        {
+            cfg.fall_interval = 0.35f; // closer to their faster baseline
+        }
 
         // Shape colors: reuse current palette to colorize imported forms.
         std::vector<Vec3> blockout_colors = {
