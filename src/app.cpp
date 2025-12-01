@@ -339,7 +339,6 @@ int main()
     glfwFocusWindow(window);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetScrollCallback(window, scroll_callback);
 
     if (!init_glad())
     {
