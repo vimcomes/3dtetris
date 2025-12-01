@@ -280,6 +280,12 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+static double g_scroll_delta = 0.0;
+void scroll_callback(GLFWwindow* /*window*/, double /*xoffset*/, double yoffset)
+{
+    g_scroll_delta += yoffset;
+}
+
 bool init_glfw()
 {
     if (glfwInit() == GLFW_FALSE)
@@ -332,6 +338,7 @@ int main()
     glfwFocusWindow(window);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
     if (!init_glad())
     {
@@ -419,7 +426,7 @@ int main()
     struct KeyState
     {
         bool left = false, right = false, up = false, down = false;
-        bool z = false, x = false;
+        bool q = false, a = false;
         bool space = false;
         bool f = false;
     } prev_keys;
@@ -458,14 +465,12 @@ int main()
     int desired_height = well_height;
 
     std::cout << "Controls:\n"
-                 "  Mouse drag: rotate view around vertical axis\n"
-                 "  W/S: tilt camera\n"
-                 "  Q/E: zoom in/out\n"
-                 "  Arrow Left/Right: rotate piece around Y\n"
-                 "  Arrow Up/Down: rotate piece around X\n"
-                 "  Z/X: rotate piece around Z\n"
-                 "  I/K: move piece forward/backward (Z)\n"
-                 "  J/L: move piece left/right (X)\n"
+                 "  Mouse drag: orbit (RMB drag to tilt)\n"
+                 "  Mouse wheel: zoom\n"
+                 "  Arrows: move piece (X/Z)\n"
+                 "  E/D: rotate around X\n"
+                 "  W/S: rotate around Y\n"
+                 "  Q/A: rotate around Z\n"
                  "  Space: hard drop\n"
                  "  F: toggle wireframe render for active piece\n"
                  "  ESC: quit\n";
@@ -568,13 +573,14 @@ int main()
             rmb.dragged = false;
         }
 
-        // Camera anchored top-down with slight tilt; allow mild zoom and pitch adjust.
-        const float zoom_speed = 6.0f;
-        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) distance = std::max(6.0f, distance - zoom_speed * dt);
-        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) distance = std::min(40.0f, distance + zoom_speed * dt);
-        const float tilt_speed = 1.5f;
-        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) pitch = std::min(to_radians(88.0f), pitch + tilt_speed * dt);
-        if (!io.WantCaptureKeyboard && glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) pitch = std::max(to_radians(40.0f), pitch - tilt_speed * dt);
+        // Camera zoom via mouse wheel; pitch adjusted via RMB drag.
+        const float zoom_speed = 3.0f;
+        double scroll = g_scroll_delta;
+        g_scroll_delta = 0.0;
+        if (scroll != 0.0 && !io.WantCaptureMouse)
+        {
+            distance = std::clamp(distance - static_cast<float>(scroll) * zoom_speed, 4.0f, 40.0f);
+        }
 
         // Piece input with edge detection for rotations/drop.
         auto is_down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
@@ -582,34 +588,37 @@ int main()
         bool right_now = is_down(GLFW_KEY_RIGHT);
         bool up_now = is_down(GLFW_KEY_UP);
         bool down_now = is_down(GLFW_KEY_DOWN);
-        bool z_now = is_down(GLFW_KEY_Z);
-        bool x_now = is_down(GLFW_KEY_X);
+        bool q_now = is_down(GLFW_KEY_Q);
+        bool a_now = is_down(GLFW_KEY_A);
+        bool w_now = is_down(GLFW_KEY_W);
+        bool s_now = is_down(GLFW_KEY_S);
+        bool e_now = is_down(GLFW_KEY_E);
+        bool d_now = is_down(GLFW_KEY_D);
         bool space_now = is_down(GLFW_KEY_SPACE);
         bool f_now = is_down(GLFW_KEY_F);
-        bool a_now = is_down(GLFW_KEY_A);
-        bool d_now = is_down(GLFW_KEY_D);
 
-        if (!io.WantCaptureKeyboard && viewport_hot && left_now && !prev_keys.left && game.rotate_active(Axis::Y, -1))
-        {
-            spin = {true, Axis::Y, -1, 0.f, 0.15f};
-        }
-        if (!io.WantCaptureKeyboard && viewport_hot && right_now && !prev_keys.right && game.rotate_active(Axis::Y, 1))
-        {
-            spin = {true, Axis::Y, 1, 0.f, 0.15f};
-        }
-        if (!io.WantCaptureKeyboard && viewport_hot && up_now && !prev_keys.up && game.rotate_active(Axis::X, -1))
-        {
-            spin = {true, Axis::X, -1, 0.f, 0.15f};
-        }
-        if (!io.WantCaptureKeyboard && viewport_hot && down_now && !prev_keys.down && game.rotate_active(Axis::X, 1))
+        // Rotations (Blockout-style)
+        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.up && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && z_now && !prev_keys.z && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.down && game.rotate_active(Axis::X, -1))
+        {
+            spin = {true, Axis::X, -1, 0.f, 0.15f};
+        }
+        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.left && game.rotate_active(Axis::Y, 1))
+        {
+            spin = {true, Axis::Y, 1, 0.f, 0.15f};
+        }
+        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.right && game.rotate_active(Axis::Y, -1))
+        {
+            spin = {true, Axis::Y, -1, 0.f, 0.15f};
+        }
+        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.q && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 0.15f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && x_now && !prev_keys.x && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.a && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 0.15f};
         }
@@ -633,10 +642,10 @@ int main()
 
         if (!io.WantCaptureKeyboard)
         {
-            handle_repeat((is_down(GLFW_KEY_J) || a_now) && viewport_hot, move_x_neg, [&] { game.move_active(-1, 0); });
-            handle_repeat((is_down(GLFW_KEY_L) || d_now) && viewport_hot, move_x_pos, [&] { game.move_active(1, 0); });
-            handle_repeat(is_down(GLFW_KEY_I) && viewport_hot, move_z_neg, [&] { game.move_active(0, -1); });
-            handle_repeat(is_down(GLFW_KEY_K) && viewport_hot, move_z_pos, [&] { game.move_active(0, 1); });
+            handle_repeat(left_now && viewport_hot, move_x_neg, [&] { game.move_active(-1, 0); });
+            handle_repeat(right_now && viewport_hot, move_x_pos, [&] { game.move_active(1, 0); });
+            handle_repeat(up_now && viewport_hot, move_z_neg, [&] { game.move_active(0, -1); });
+            handle_repeat(down_now && viewport_hot, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
     if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space)
@@ -649,7 +658,7 @@ int main()
             wireframe_active = !wireframe_active;
         }
 
-    prev_keys = {left_now, right_now, up_now, down_now, z_now, x_now, space_now, f_now};
+    prev_keys = {left_now, right_now, up_now, down_now, q_now, a_now, space_now, f_now};
 
     game.update(dt);
     if (spin.active)
@@ -1253,14 +1262,13 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             }
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
-            ImGui::BulletText("Mouse drag: orbit");
-            ImGui::BulletText("W/S: tilt");
-            ImGui::BulletText("Q/E: zoom");
-            ImGui::BulletText("Arrows/Z/X: rotate");
-            ImGui::BulletText("I/K/J/L: move");
-            ImGui::BulletText("Space: hard drop");
-            ImGui::BulletText("F: toggle wireframe");
-            ImGui::BulletText("Esc: quit");
+        ImGui::BulletText("Mouse drag: orbit (RMB drag to tilt)");
+        ImGui::BulletText("Mouse wheel: zoom");
+        ImGui::BulletText("Arrows: move");
+        ImGui::BulletText("E/D: rotate X, W/S: rotate Y, Q/A: rotate Z");
+        ImGui::BulletText("Space: hard drop");
+        ImGui::BulletText("F: toggle wireframe");
+        ImGui::BulletText("Esc: quit");
             ImGui::Separator();
             ImGui::Checkbox("Auto play", &auto_play.enabled);
             ImGui::Text("Auto steps: %d", auto_play.steps);
