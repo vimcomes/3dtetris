@@ -24,8 +24,8 @@ height = 20
 
 # Геймплей
 [gameplay]
-# fall_interval = 6.2  # debug speed; remove comment to override preset default
-start_level = 2
+fall_interval = 1.2
+start_level = 0
 
 # Пресет (modern|blockout). Для blockout используется data/forms_blockout.dat с центрами фигур, стакан 3x3x18, палитра/скорость как в Blockout.
 [preset]

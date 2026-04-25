@@ -946,7 +946,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 // --- Floor plane (block shader, dark purple emissive) ---
                 setup_block_shader();
-                draw_block(bottom_mesh, identity(), Vec3{0.133f, 0.039f, 0.251f}, 0.92f, 1.0f);
+                draw_block(bottom_mesh, identity(), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
 
                 // --- Locked cells: glass faces then bright edges ---
                 const auto& locked_positions = game.locked_cells();
@@ -1214,7 +1214,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 iso_draw_flat(iso_wall_grid_mesh, identity(), palette.grid, 0.12f);
 
                 iso_setup_block();
-                iso_draw_block(bottom_mesh, identity(), Vec3{0.133f, 0.039f, 0.251f}, 0.92f, 1.0f);
+                iso_draw_block(bottom_mesh, identity(), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
 
                 if (const auto& p = game.active_piece())
                 {
