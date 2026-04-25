@@ -1,6 +1,7 @@
 #include "game.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -78,6 +79,36 @@ void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
         }
     }
 }
+
+ShapeBounds rotated_bounds(const std::vector<Vec3i>& blocks, const int rot[3][3])
+{
+    ShapeBounds b{};
+    if (blocks.empty())
+    {
+        return b;
+    }
+    Vec3i r0 = apply_rot(rot, blocks[0]);
+    b.min_x = b.max_x = r0.x;
+    b.min_y = b.max_y = r0.y;
+    b.min_z = b.max_z = r0.z;
+    for (size_t i = 1; i < blocks.size(); ++i)
+    {
+        Vec3i r = apply_rot(rot, blocks[i]);
+        b.min_x = std::min(b.min_x, r.x);
+        b.max_x = std::max(b.max_x, r.x);
+        b.min_y = std::min(b.min_y, r.y);
+        b.max_y = std::max(b.max_y, r.y);
+        b.min_z = std::min(b.min_z, r.z);
+        b.max_z = std::max(b.max_z, r.z);
+    }
+    return b;
+}
+
+int grid_y_from_float(float y)
+{
+    // Keep the block in the upper cell until it fully crosses into the next.
+    return static_cast<int>(std::ceil(y - 1e-4f));
+}
 } // namespace
 
 Well::Well(int w, int d, int h) : width_(w), depth_(d), height_(h), cells_(w * d * h)
@@ -133,7 +164,7 @@ Vec3 Well::cell_center(const Vec3i& c, float cell_size) const
                 min_z + (c.z + 0.5f) * cell_size};
 }
 
-Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interval) : well_(w, d, h)
+Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interval, int start_level) : well_(w, d, h)
 {
     if (shapes.empty())
     {
@@ -185,6 +216,9 @@ Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interva
     {
         fall_interval_ = fall_interval;
     }
+    base_fall_interval_ = fall_interval_;
+    start_level_ = std::clamp(start_level, 0, 9);
+    reset_progress();
     active_ = spawn_piece();
 }
 
@@ -219,6 +253,7 @@ Piece Game::spawn_piece()
     start_y = std::max(0, start_y);
 
     p.pos = Vec3i{start_x, start_y, start_z};
+    p.pos_y = static_cast<float>(p.pos.y);
     return p;
 }
 
@@ -246,24 +281,61 @@ void Game::try_lock_and_spawn()
     {
         return;
     }
+    const int piece_cubes = static_cast<int>(active_->blocks.size());
+    int min_y = well_.height();
+    int max_y = -1;
+    for (auto b : active_->blocks)
+    {
+        Vec3i rb = apply_rot(active_->rot, b);
+        int y = active_->pos.y + rb.y;
+        min_y = std::min(min_y, y);
+        max_y = std::max(max_y, y);
+    }
+    min_y = std::clamp(min_y, 0, well_.height() - 1);
+    max_y = std::clamp(max_y, 0, well_.height() - 1);
     well_.lock_piece(*active_);
-    clear_full_planes();
+    last_cleared_ = clear_full_planes_range(min_y, max_y);
+    total_cleared_ += last_cleared_;
     rebuild_locked_cache();
+    cubes_dropped_ += piece_cubes;
+    update_level_and_speed();
+    const int stack = stack_height();
+    const int free_height = std::max(1, well_.height() - stack);
+    const float time_now = piece_timer_;
+    const float fall_speed = fall_interval_ > 0.0f ? 1.0f / fall_interval_ : 0.0f;
+    const float clear_bonus = std::pow(2.0f, static_cast<float>(last_cleared_));
+    const float move_score = (level_factor_ * time_now * 200.0f * clear_bonus * fall_speed) / free_height;
+    score_ += static_cast<int>(move_score + 0.5f);
     active_ = spawn_piece();
+    fall_timer_ = 0.0f;
+    piece_timer_ = 0.0f;
+    drop_target_.reset();
     if (!can_place(*active_))
     {
-        // Simple reset on top collision.
-        well_ = Well(well_.width(), well_.depth(), well_.height());
-        locked_positions_.clear();
-        locked_colors_.clear();
-        active_ = spawn_piece();
+        state_ = GameState::GameOver;
+        active_.reset();
     }
 }
 
 int Game::clear_full_planes()
 {
+    return clear_full_planes_range(0, well_.height() - 1);
+}
+
+int Game::clear_full_planes_range(int min_y, int max_y)
+{
+    if (well_.height() <= 0)
+    {
+        return 0;
+    }
+    min_y = std::clamp(min_y, 0, well_.height() - 1);
+    max_y = std::clamp(max_y, 0, well_.height() - 1);
+    if (min_y > max_y)
+    {
+        return 0;
+    }
     int cleared = 0;
-    for (int y = 0; y < well_.height(); ++y)
+    for (int y = min_y; y <= max_y; ++y)
     {
         bool full = true;
         for (int z = 0; z < well_.depth() && full; ++z)
@@ -370,26 +442,60 @@ std::vector<int> Game::filled_planes() const
     return planes;
 }
 
+void Game::restart()
+{
+    well_ = Well(well_.width(), well_.depth(), well_.height());
+    locked_positions_.clear();
+    locked_colors_.clear();
+    total_cleared_ = 0;
+    state_ = GameState::Playing;
+    reset_progress();
+    active_ = spawn_piece();
+    fall_timer_ = 0.0f;
+    piece_timer_ = 0.0f;
+    drop_target_.reset();
+}
+
 void Game::update(float dt)
 {
+    if (state_ != GameState::Playing) return;
+
     if (!active_)
     {
         active_ = spawn_piece();
-    }
-    fall_timer_ += dt;
-    if (fall_timer_ >= fall_interval_)
-    {
         fall_timer_ = 0.0f;
-        Piece moved = *active_;
-        moved.pos.y -= 1;
-        if (can_place(moved))
+        piece_timer_ = 0.0f;
+    }
+    piece_timer_ += dt;
+
+    float fall_speed = fall_interval_ > 0.0f ? (1.0f / fall_interval_) : 0.0f;
+    if (drop_target_)
+    {
+        fall_speed = std::max(fall_speed * 6.0f, fall_speed + 3.0f);
+    }
+
+    float new_y = active_->pos_y - fall_speed * dt;
+    int new_grid_y = grid_y_from_float(new_y);
+    Piece moved = *active_;
+    moved.pos_y = new_y;
+    moved.pos.y = new_grid_y;
+
+    if (can_place(moved))
+    {
+        active_ = moved;
+        if (drop_target_ && active_->pos.y <= *drop_target_)
         {
-            active_ = moved;
-        }
-        else
-        {
+            active_->pos.y = *drop_target_;
+            active_->pos_y = static_cast<float>(active_->pos.y);
+            drop_target_.reset();
             try_lock_and_spawn();
         }
+    }
+    else
+    {
+        active_->pos_y = static_cast<float>(active_->pos.y);
+        drop_target_.reset();
+        try_lock_and_spawn();
     }
 }
 
@@ -428,6 +534,83 @@ bool Game::rotate_active(Axis axis, int dir)
         active_ = rotated;
         return true;
     }
+
+    // Blokout-style wall kick: try to nudge within bounds step-by-step.
+    {
+        Piece kicked = rotated;
+        ShapeBounds rb = rotated_bounds(kicked.blocks, kicked.rot);
+        bool ok = true;
+        while (ok && kicked.pos.x + rb.min_x < 0)
+        {
+            Piece step = kicked;
+            step.pos.x += 1;
+            if (!can_place(step))
+            {
+                ok = false;
+                break;
+            }
+            kicked = step;
+        }
+        while (ok && kicked.pos.x + rb.max_x >= well_.width())
+        {
+            Piece step = kicked;
+            step.pos.x -= 1;
+            if (!can_place(step))
+            {
+                ok = false;
+                break;
+            }
+            kicked = step;
+        }
+        while (ok && kicked.pos.z + rb.min_z < 0)
+        {
+            Piece step = kicked;
+            step.pos.z += 1;
+            if (!can_place(step))
+            {
+                ok = false;
+                break;
+            }
+            kicked = step;
+        }
+        while (ok && kicked.pos.z + rb.max_z >= well_.depth())
+        {
+            Piece step = kicked;
+            step.pos.z -= 1;
+            if (!can_place(step))
+            {
+                ok = false;
+                break;
+            }
+            kicked = step;
+        }
+        if (ok && can_place(kicked))
+        {
+            active_ = kicked;
+            return true;
+        }
+    }
+
+    // Extra kick attempts near obstacles.
+    {
+        static const Vec3i kicks[] = {
+            {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
+            {2, 0, 0}, {-2, 0, 0}, {0, 0, 2}, {0, 0, -2},
+            {1, 0, 1}, {-1, 0, 1}, {1, 0, -1}, {-1, 0, -1},
+        };
+        for (const auto& k : kicks)
+        {
+            Piece candidate = rotated;
+            candidate.pos.x += k.x;
+            candidate.pos.z += k.z;
+            if (can_place(candidate))
+            {
+                active_ = candidate;
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -466,9 +649,7 @@ bool Game::hard_drop()
             break;
         }
     }
-    active_ = dropped;
-    try_lock_and_spawn();
-    fall_timer_ = 0.0f;
+    drop_target_ = dropped.pos.y;
     return true;
 }
 
@@ -497,11 +678,11 @@ std::optional<Piece> Game::ghost_piece() const
 
 float Game::fall_progress() const
 {
-    if (fall_interval_ <= 0.0f)
+    if (!active_)
     {
         return 0.0f;
     }
-    float t = fall_timer_ / fall_interval_;
+    float t = static_cast<float>(active_->pos.y) - active_->pos_y;
     return std::clamp(t, 0.0f, 1.0f);
 }
 
@@ -514,4 +695,46 @@ bool Game::active_can_fall() const
     Piece step = *active_;
     step.pos.y -= 1;
     return can_place(step);
+}
+
+void Game::reset_progress()
+{
+    score_ = 0;
+    cubes_dropped_ = 0;
+    last_cleared_ = 0;
+    level_ = start_level_;
+    level_factor_ = (level_ < 5) ? (level_ / 5.0f) : (level_ - 5.0f);
+    update_level_and_speed();
+}
+
+void Game::update_level_and_speed()
+{
+    const int new_level = cubes_dropped_ / 70;
+    if (level_ < 10 && level_ < new_level)
+    {
+        level_ = new_level;
+        level_factor_ = (level_ < 5) ? (level_ / 5.0f) : (level_ - 5.0f);
+    }
+    const float base_speed = base_fall_interval_ > 0.0f ? 1.0f / base_fall_interval_ : 0.0f;
+    const float fall_speed = base_speed + level_ * 0.3f;
+    fall_interval_ = fall_speed > 0.0f ? (1.0f / fall_speed) : base_fall_interval_;
+}
+
+int Game::stack_height() const
+{
+    int top = -1;
+    for (int y = 0; y < well_.height(); ++y)
+    {
+        for (int z = 0; z < well_.depth(); ++z)
+        {
+            for (int x = 0; x < well_.width(); ++x)
+            {
+                if (!well_.is_free(Vec3i{x, y, z}))
+                {
+                    if (y > top) top = y;
+                }
+            }
+        }
+    }
+    return top + 1;
 }
