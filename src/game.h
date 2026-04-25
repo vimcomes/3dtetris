@@ -89,6 +89,7 @@ public:
     void rebuild_locked_cache();
     [[nodiscard]] std::vector<int> filled_planes() const;
     bool can_place_public(const Piece& p) const { return can_place(p); }
+    const std::optional<Piece>& next_piece() const { return next_piece_; }
     int score() const { return score_; }
     int level() const { return level_; }
     int cubes_dropped() const { return cubes_dropped_; }
@@ -126,8 +127,11 @@ private:
     float fall_interval_ = 1.2f;
     float piece_timer_ = 0.0f;
     std::optional<int> drop_target_;
+    std::optional<Piece> next_piece_;
+    std::vector<int> bag_;
     std::mt19937 rng_;
 
+    Piece draw_from_bag();
     Piece spawn_piece();
     bool can_place(const Piece& p) const;
     void try_lock_and_spawn();

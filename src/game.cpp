@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace
 {
@@ -222,18 +223,21 @@ Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interva
     active_ = spawn_piece();
 }
 
-Piece Game::spawn_piece()
+Piece Game::draw_from_bag()
 {
-    if (shapes_.empty())
+    if (shapes_.empty()) return {};
+    if (bag_.empty())
     {
-        return {};
+        bag_.resize(shapes_.size());
+        std::iota(bag_.begin(), bag_.end(), 0);
+        std::shuffle(bag_.begin(), bag_.end(), rng_);
     }
-    std::uniform_int_distribution<int> dist(0, static_cast<int>(shapes_.size() - 1));
-    int shape = dist(rng_);
+    int shape = bag_.back();
+    bag_.pop_back();
+
     Piece p;
     p.shape = shape;
     p.blocks = shapes_[shape].blocks;
-    // Reset rotation matrix to identity.
     p.rot[0][0] = 1; p.rot[0][1] = 0; p.rot[0][2] = 0;
     p.rot[1][0] = 0; p.rot[1][1] = 1; p.rot[1][2] = 0;
     p.rot[2][0] = 0; p.rot[2][1] = 0; p.rot[2][2] = 1;
@@ -255,6 +259,15 @@ Piece Game::spawn_piece()
     p.pos = Vec3i{start_x, start_y, start_z};
     p.pos_y = static_cast<float>(p.pos.y);
     return p;
+}
+
+Piece Game::spawn_piece()
+{
+    if (shapes_.empty()) return {};
+    if (!next_piece_) next_piece_ = draw_from_bag();
+    Piece current = *next_piece_;
+    next_piece_ = draw_from_bag();
+    return current;
 }
 
 bool Game::can_place(const Piece& p) const
@@ -449,6 +462,8 @@ void Game::restart()
     locked_colors_.clear();
     total_cleared_ = 0;
     state_ = GameState::Playing;
+    bag_.clear();
+    next_piece_.reset();
     reset_progress();
     active_ = spawn_piece();
     fall_timer_ = 0.0f;

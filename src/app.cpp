@@ -355,10 +355,35 @@ int main()
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
-    // Keep UI backgrounds transparent; rely on GL clear for black.
-    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
-    style.Colors[ImGuiCol_ChildBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
-    style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.WindowRounding   = 8.0f;
+    style.FrameRounding    = 4.0f;
+    style.GrabRounding     = 4.0f;
+    style.PopupRounding    = 4.0f;
+    style.ScrollbarRounding = 4.0f;
+    style.TabRounding      = 4.0f;
+    style.WindowPadding    = ImVec2(12, 12);
+    style.FramePadding     = ImVec2(8, 5);
+    style.ItemSpacing      = ImVec2(10, 7);
+    style.WindowBorderSize = 0.0f;
+    // Transparent BG for GL viewport and iso windows; Controls gets its own push.
+    style.Colors[ImGuiCol_WindowBg]        = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.Colors[ImGuiCol_ChildBg]         = ImVec4(0.f, 0.f, 0.f, 0.f);
+    style.Colors[ImGuiCol_DockingEmptyBg]  = ImVec4(0.f, 0.f, 0.f, 0.f);
+    // Neon cyan accent
+    style.Colors[ImGuiCol_Text]            = ImVec4(0.88f, 0.95f, 1.00f, 1.0f);
+    style.Colors[ImGuiCol_Button]          = ImVec4(0.08f, 0.28f, 0.42f, 0.90f);
+    style.Colors[ImGuiCol_ButtonHovered]   = ImVec4(0.12f, 0.52f, 0.72f, 1.00f);
+    style.Colors[ImGuiCol_ButtonActive]    = ImVec4(0.05f, 0.70f, 0.90f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrab]      = ImVec4(0.00f, 0.75f, 0.90f, 1.00f);
+    style.Colors[ImGuiCol_SliderGrabActive]= ImVec4(0.00f, 0.90f, 1.00f, 1.00f);
+    style.Colors[ImGuiCol_CheckMark]       = ImVec4(0.00f, 0.90f, 1.00f, 1.00f);
+    style.Colors[ImGuiCol_FrameBg]         = ImVec4(0.06f, 0.10f, 0.18f, 0.90f);
+    style.Colors[ImGuiCol_FrameBgHovered]  = ImVec4(0.08f, 0.18f, 0.32f, 0.90f);
+    style.Colors[ImGuiCol_Header]          = ImVec4(0.00f, 0.50f, 0.72f, 0.45f);
+    style.Colors[ImGuiCol_HeaderHovered]   = ImVec4(0.00f, 0.68f, 0.88f, 0.60f);
+    style.Colors[ImGuiCol_Separator]       = ImVec4(0.00f, 0.45f, 0.65f, 0.50f);
+    style.Colors[ImGuiCol_TitleBg]         = ImVec4(0.04f, 0.04f, 0.10f, 1.00f);
+    style.Colors[ImGuiCol_TitleBgActive]   = ImVec4(0.04f, 0.10f, 0.18f, 1.00f);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
     // Replace ImGui-installed scroll callback with our chaining version.
@@ -388,6 +413,7 @@ int main()
         return std::clamp(v, 3, 7);
     };
     RenderShader shader = create_render_shader();
+    GradientShader grad_shader = create_gradient_shader();
     RenderPalette palette = config.palette;
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
@@ -464,6 +490,10 @@ int main()
         std::vector<AiPlanStep> plan;
         size_t plan_idx = 0;
     } auto_play;
+
+    int prev_total_cleared = 0;
+    float clear_flash_t = 0.f;
+    static constexpr float clear_flash_dur = 0.35f;
 
     int desired_width = well_width;
     int desired_depth = well_depth;
@@ -675,6 +705,12 @@ int main()
         prev_keys = {e_now, d_now, w_now, s_now, q_now, a_now, space_now, f_now, p_now};
 
         game.update(dt);
+        {
+            int tc = game.total_cleared();
+            if (tc > prev_total_cleared) { clear_flash_t = clear_flash_dur; }
+            prev_total_cleared = tc;
+            clear_flash_t = std::max(0.f, clear_flash_t - dt);
+        }
         if (spin.active)
         {
             spin.t += dt;
@@ -769,8 +805,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         std::clamp(c.y, 0.0f, 1.0f),
                         std::clamp(c.z, 0.0f, 1.0f)};
                 };
-                glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                draw_gradient_bg(grad_shader, palette.grad_bottom, palette.grad_top);
 
                 float center_y_view = static_cast<float>(well_height) * cell_size * 0.5f;
                 float cy = std::cos(yaw);
@@ -846,6 +882,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 mvp_world = multiply(proj, view);
 
                 glUseProgram(shader.program);
+                glUniform1f(shader.u_emissive, 1.0f);
 
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
@@ -867,45 +904,57 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
                 draw_mesh(wall_grid_mesh, identity(), palette.grid, 1.0f);
 
-                // Locked cells.
+                // Locked cells — flash boost on line clear.
                 const auto& locked_positions = game.locked_cells();
                 const auto& locked_colors = game.locked_colors();
-                for (size_t i = 0; i < locked_positions.size(); ++i)
                 {
-                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                    Mat4 model = translation(world);
-                    Mat4 mvp = multiply(mvp_world, model);
-                    Vec3 t = apply_tone(locked_colors[i]);
-                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
-                    glUniform1f(shader.u_alpha, 1.0f);
-                    glBindVertexArray(cube_mesh.vao);
-                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    float locked_emissive = 1.0f;
+                    if (clear_flash_t > 0.f)
+                    {
+                        float t = clear_flash_t / clear_flash_dur;
+                        locked_emissive = 1.0f + t * 3.5f;
+                    }
+                    glUniform1f(shader.u_emissive, locked_emissive);
+                    for (size_t i = 0; i < locked_positions.size(); ++i)
+                    {
+                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                        Mat4 model = translation(world);
+                        Mat4 mvp = multiply(mvp_world, model);
+                        Vec3 t = apply_tone(locked_colors[i]);
+                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                        glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                        glUniform1f(shader.u_alpha, 1.0f);
+                        glBindVertexArray(cube_mesh.vao);
+                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    }
+                    glUniform1f(shader.u_emissive, 1.0f);
+                    // Outline pass.
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                    glLineWidth(1.3f);
+                    for (size_t i = 0; i < locked_positions.size(); ++i)
+                    {
+                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                        Mat4 model = translation(world);
+                        Mat4 mvp = multiply(mvp_world, model);
+                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                        glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
+                        glUniform1f(shader.u_alpha, 1.0f);
+                        glBindVertexArray(cube_mesh.vao);
+                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    }
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 }
-                // Outline pass to accentuate locked blocks.
-                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                glLineWidth(1.3f);
-                for (size_t i = 0; i < locked_positions.size(); ++i)
-                {
-                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                    Mat4 model = translation(world);
-                    Mat4 mvp = multiply(mvp_world, model);
-                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
-                    glUniform1f(shader.u_alpha, 1.0f);
-                    glBindVertexArray(cube_mesh.vao);
-                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
-                }
-                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-                // Ghost projection on landing spot (wireframe, low alpha).
+                // Ghost projection on landing spot (wireframe, dim).
                 if (const auto ghost = game.ghost_piece())
                 {
                     auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
                     update_mesh(active_edges, ghost_edges);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
+                    glUniform1f(shader.u_emissive, 0.7f);
                     draw_mesh(active_edges, identity(), Vec3{1.0f, 1.0f, 1.0f}, 0.32f);
+                    glUniform1f(shader.u_emissive, 1.0f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                 }
@@ -950,14 +999,16 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
+                    glUniform1f(shader.u_emissive, 1.5f);
                     if (wireframe_active)
                     {
                         draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.7f);
+                        draw_mesh(active_mesh, model, p->color, 0.72f);
                     }
+                    glUniform1f(shader.u_emissive, 1.0f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
@@ -1014,8 +1065,8 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         std::clamp(c.y, 0.0f, 1.0f),
                         std::clamp(c.z, 0.0f, 1.0f)};
                 };
-                glClearColor(palette.clear.x, palette.clear.y, palette.clear.z, 1.0f);
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                draw_gradient_bg(grad_shader, palette.grad_bottom, palette.grad_top);
 
                 float yaw_iso = to_radians(45.0f);
                 float pitch_iso = to_radians(65.0f);
@@ -1090,6 +1141,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 mvp_world = multiply(proj, view);
 
                 glUseProgram(shader.program);
+                glUniform1f(shader.u_emissive, 1.0f);
                 auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
                 {
                     Vec3 t = apply_tone(tint);
@@ -1147,48 +1199,57 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         model = multiply(model, translation(Vec3{0.f, fall_offset, 0.f}));
                     }
 
+                    glUniform1f(shader.u_emissive, 1.5f);
                     if (wireframe_active)
                     {
                         draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
-                        Vec3 iso_tint{std::min(p->color.x * 1.1f + 0.05f, 1.0f),
-                                      std::min(p->color.y * 1.1f + 0.05f, 1.0f),
-                                      std::min(p->color.z * 1.1f + 0.05f, 1.0f)};
-                        draw_mesh(active_mesh, model, iso_tint, 0.7f);
+                        draw_mesh(active_mesh, model, p->color, 0.72f);
                     }
+                    glUniform1f(shader.u_emissive, 1.0f);
                 }
                 // Locked cells.
-                const auto& locked_positions = game.locked_cells();
-                const auto& locked_colors = game.locked_colors();
-                for (size_t i = 0; i < locked_positions.size(); ++i)
                 {
-                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                    Mat4 model = translation(world);
-                    Mat4 mvp = multiply(mvp_world, model);
-                    Vec3 t = apply_tone(locked_colors[i]);
-                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
-                    glUniform1f(shader.u_alpha, 1.0f);
-                    glBindVertexArray(cube_mesh.vao);
-                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    float locked_emissive = 1.0f;
+                    if (clear_flash_t > 0.f)
+                    {
+                        float t = clear_flash_t / clear_flash_dur;
+                        locked_emissive = 1.0f + t * 3.5f;
+                    }
+                    const auto& locked_positions = game.locked_cells();
+                    const auto& locked_colors = game.locked_colors();
+                    glUniform1f(shader.u_emissive, locked_emissive);
+                    for (size_t i = 0; i < locked_positions.size(); ++i)
+                    {
+                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                        Mat4 model = translation(world);
+                        Mat4 mvp = multiply(mvp_world, model);
+                        Vec3 t = apply_tone(locked_colors[i]);
+                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                        glUniform3f(shader.u_tint, t.x, t.y, t.z);
+                        glUniform1f(shader.u_alpha, 1.0f);
+                        glBindVertexArray(cube_mesh.vao);
+                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    }
+                    glUniform1f(shader.u_emissive, 1.0f);
+                    // Edge overlay.
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                    glLineWidth(1.2f);
+                    for (size_t i = 0; i < locked_positions.size(); ++i)
+                    {
+                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                        Mat4 model = translation(world);
+                        Mat4 mvp = multiply(mvp_world, model);
+                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
+                        glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
+                        glUniform1f(shader.u_alpha, 1.0f);
+                        glBindVertexArray(cube_mesh.vao);
+                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                    }
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 }
-                // Edge overlay for locked cells to distinguish blocks.
-                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                glLineWidth(1.2f);
-                for (size_t i = 0; i < locked_positions.size(); ++i)
-                {
-                    Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                    Mat4 model = translation(world);
-                    Mat4 mvp = multiply(mvp_world, model);
-                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
-                    glUniform1f(shader.u_alpha, 1.0f);
-                    glBindVertexArray(cube_mesh.vao);
-                    glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
-                }
-                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
                 glBindVertexArray(0);
                 glDisable(GL_SCISSOR_TEST);
@@ -1196,18 +1257,46 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         }
         ImGui::End();
 
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.04f, 0.10f, 0.92f));
         if (ImGui::Begin("Controls"))
         {
+            // Next piece preview (2D isometric projection).
+            if (const auto& np = game.next_piece())
+            {
+                ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "NEXT");
+                ImVec2 canvas = ImGui::GetCursorScreenPos();
+                float step = 13.f;
+                float cx = canvas.x + 55.f;
+                float cy = canvas.y + 40.f;
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                for (const auto& b : np->blocks)
+                {
+                    Vec3i rb = apply_rot(np->rot, b);
+                    float ix = static_cast<float>(rb.x - rb.z) * step;
+                    float iy = (static_cast<float>(rb.x + rb.z) * 0.5f - static_cast<float>(rb.y)) * step;
+                    float x0 = cx + ix - step * 0.45f;
+                    float y0 = cy + iy - step * 0.45f;
+                    float x1 = cx + ix + step * 0.45f;
+                    float y1 = cy + iy + step * 0.45f;
+                    ImU32 col = IM_COL32(
+                        static_cast<int>(np->color.x * 255),
+                        static_cast<int>(np->color.y * 255),
+                        static_cast<int>(np->color.z * 255), 230);
+                    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), col, 2.f);
+                    dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1),
+                                IM_COL32(200, 230, 255, 120), 2.f, 0, 1.2f);
+                }
+                ImGui::Dummy(ImVec2(110.f, 80.f));
+            }
+            ImGui::Separator();
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::Separator();
-            ImGui::TextUnformatted("Game");
-            ImGui::Text("Score:  %d", game.score());
+            ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "SCORE  %d", game.score());
             ImGui::Text("Level:  %d", game.level());
             ImGui::Text("Lines:  %d", game.total_cleared());
             ImGui::Text("Last clear: %d", game.last_cleared());
-            ImGui::Text("Fall interval: %.3f s", game.fall_interval());
-            ImGui::Text("Fall speed: %.2f cells/s", game.fall_speed());
+            ImGui::Text("Fall speed: %.2f /s", game.fall_speed());
             ImGui::Separator();
             ImGui::TextUnformatted("Well size");
             ImGui::SliderInt("Width", &desired_width, 3, 7);
@@ -1268,6 +1357,27 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::Text("Auto steps: %d", auto_play.steps);
         }
         ImGui::End();
+        ImGui::PopStyleColor();
+
+        // HUD overlay on main viewport (B6).
+        if (game.state() == GameState::Playing || game.state() == GameState::Paused)
+        {
+            ImGui::SetNextWindowPos(ImVec2(viewport_rect.x0 + 14.f, viewport_rect.y0 + 14.f), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.0f);
+            ImGuiWindowFlags hud_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+                                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBackground |
+                                         ImGuiWindowFlags_NoFocusOnAppearing;
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.15f, 0.85f, 1.0f, 0.90f));
+            if (ImGui::Begin("##hud", nullptr, hud_flags))
+            {
+                ImGui::Text("SCORE  %d", game.score());
+                ImGui::Text("LEVEL  %d", game.level());
+                ImGui::Text("LINES  %d", game.total_cleared());
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
+        }
 
         // Game Over overlay
         if (game.state() == GameState::GameOver)
@@ -1346,6 +1456,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     destroy_mesh(iso_walls_mesh);
     destroy_mesh(iso_wall_grid_mesh);
     destroy_render_shader(shader);
+    destroy_gradient_shader(grad_shader);
     glfwDestroyWindow(window);
     glfwTerminate();
     return EXIT_SUCCESS;
