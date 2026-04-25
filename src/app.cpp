@@ -385,10 +385,7 @@ int main()
     AppConfig config = load_config(pick_config_path());
     auto clamp_width_depth = [](int v)
     {
-        int clamped = std::clamp(v, 3, 10);
-        if (clamped < 6) return clamped; // allow narrow Blockout tube
-        if (clamped % 2 != 0) clamped = (clamped < 10) ? (clamped + 1) : (clamped - 1);
-        return clamped;
+        return std::clamp(v, 3, 7);
     };
     RenderShader shader = create_render_shader();
     RenderPalette palette = config.palette;
@@ -397,12 +394,14 @@ int main()
 
     int well_width = clamp_width_depth(config.well_width);
     int well_depth = clamp_width_depth(config.well_depth);
-    int well_height = std::clamp(config.well_height, 12, 30);
+    int well_height = std::clamp(config.well_height, 5, 20);
     const float cell_size = 1.0f;
 
     auto floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
     auto walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
+    auto wall_grid_mesh = make_mesh(build_well_wall_grid_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
     auto iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
+    auto iso_wall_grid_mesh = make_mesh(build_well_wall_grid_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
     auto bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
     GlMesh active_mesh = make_empty_mesh();
     GlMesh active_edges = make_empty_mesh(GL_LINES);
@@ -417,7 +416,7 @@ int main()
     ImVec2 iso_prev_size{-1.f, -1.f};
     double prev_time = glfwGetTime();
 
-    Game game{well_width, well_depth, well_height, config.shapes, config.fall_interval};
+    Game game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
     struct Spin
     {
         bool active = false;
@@ -434,6 +433,7 @@ int main()
         bool rot_z_pos = false, rot_z_neg = false;
         bool space = false;
         bool f = false;
+        bool p = false;
     } prev_keys;
 
     struct RepeatState
@@ -468,14 +468,15 @@ int main()
     int desired_width = well_width;
     int desired_depth = well_depth;
     int desired_height = well_height;
+    int desired_start_level = config.start_level;
 
     std::cout << "Controls:\n"
                  "  Mouse drag: orbit (RMB drag to tilt)\n"
                  "  Mouse wheel: zoom\n"
                  "  Arrows: move piece (X/Z)\n"
                  "  E/D: rotate around X\n"
-                 "  W/S: rotate around Y\n"
-                 "  Q/A: rotate around Z\n"
+                 "  W/S: rotate around Z\n"
+                 "  Q/A: rotate around Y\n"
                  "  Space: hard drop\n"
                  "  F: toggle wireframe render for active piece\n"
                  "  ESC: quit\n";
@@ -601,31 +602,32 @@ int main()
         bool d_now = is_down(GLFW_KEY_D);
         bool space_now = is_down(GLFW_KEY_SPACE);
         bool f_now = is_down(GLFW_KEY_F);
+        bool p_now = is_down(GLFW_KEY_P);
 
-        // Rotations (Blockout-style)
-        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.rot_x_pos && game.rotate_active(Axis::X, 1))
+        // Rotations (Blockout-style) — only when game is active
+        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.rot_x_pos && game.state() == GameState::Playing && game.rotate_active(Axis::X, 1))
         {
-            spin = {true, Axis::X, 1, 0.f, 0.15f};
+            spin = {true, Axis::X, 1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.rot_x_neg && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.rot_x_neg && game.state() == GameState::Playing && game.rotate_active(Axis::X, -1))
         {
-            spin = {true, Axis::X, -1, 0.f, 0.15f};
+            spin = {true, Axis::X, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.rot_y_pos && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.rot_y_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Z, 1))
         {
-            spin = {true, Axis::Y, 1, 0.f, 0.15f};
+            spin = {true, Axis::Z, 1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.rot_y_neg && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.rot_y_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Z, -1))
         {
-            spin = {true, Axis::Y, -1, 0.f, 0.15f};
+            spin = {true, Axis::Z, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.rot_z_pos && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.rot_z_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Y, -1))
         {
-            spin = {true, Axis::Z, -1, 0.f, 0.15f};
+            spin = {true, Axis::Y, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.rot_z_neg && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.rot_z_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Y, 1))
         {
-            spin = {true, Axis::Z, 1, 0.f, 0.15f};
+            spin = {true, Axis::Y, 1, 0.f, 1.0f / 3.0f};
         }
 
         auto handle_repeat = [&](bool pressed, RepeatState& rep, auto action)
@@ -645,7 +647,7 @@ int main()
             }
         };
 
-        if (!io.WantCaptureKeyboard)
+        if (!io.WantCaptureKeyboard && game.state() == GameState::Playing)
         {
             handle_repeat(left_now && viewport_hot, move_x_neg, [&] { game.move_active(-1, 0); });
             handle_repeat(right_now && viewport_hot, move_x_pos, [&] { game.move_active(1, 0); });
@@ -653,7 +655,7 @@ int main()
             handle_repeat(down_now && viewport_hot, move_z_pos, [&] { game.move_active(0, 1); });
         }
 
-        if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space)
+        if (!io.WantCaptureKeyboard && viewport_hot && space_now && !prev_keys.space && game.state() == GameState::Playing)
         {
             game.hard_drop();
             spin.active = false;
@@ -662,8 +664,15 @@ int main()
         {
             wireframe_active = !wireframe_active;
         }
+        if (!io.WantCaptureKeyboard && p_now && !prev_keys.p)
+        {
+            if (game.state() == GameState::Playing)
+                game.set_state(GameState::Paused);
+            else if (game.state() == GameState::Paused)
+                game.set_state(GameState::Playing);
+        }
 
-        prev_keys = {e_now, d_now, w_now, s_now, q_now, a_now, space_now, f_now};
+        prev_keys = {e_now, d_now, w_now, s_now, q_now, a_now, space_now, f_now, p_now};
 
         game.update(dt);
         if (spin.active)
@@ -683,10 +692,6 @@ int main()
             spin_angle = remaining * -sign * to_radians(90.0f);
         }
         float fall_offset = 0.0f;
-        if (game.active_can_fall())
-        {
-            fall_offset = game.fall_progress() * cell_size;
-        }
 
     if (auto_play.enabled && game.active_piece())
     {
@@ -860,70 +865,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
                 draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
                 draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
-
-                // Active piece with simple spin animation (render on top).
-                if (const auto& p = game.active_piece())
-                {
-                    glDisable(GL_DEPTH_TEST);
-                    glDisable(GL_CULL_FACE); // allow both sides for translucent active piece
-                    glDepthMask(GL_FALSE); // allow seeing locked blocks through translucent active piece.
-                    Vec3 pivot{0.f, 0.f, 0.f};
-                    for (const auto& b : p->blocks)
-                    {
-                        Vec3i rb = apply_rot(p->rot, b);
-                        Vec3i c{p->pos.x + rb.x, p->pos.y + rb.y, p->pos.z + rb.z};
-                        Vec3 world = game.well().cell_center(c, cell_size);
-                        pivot.x += world.x;
-                        pivot.y += world.y;
-                        pivot.z += world.z;
-                    }
-                    float inv = 1.0f / static_cast<float>(p->blocks.size());
-                    pivot.x *= inv;
-                    pivot.y *= inv;
-                    pivot.z *= inv;
-
-                    auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
-                    auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
-                    update_mesh(active_mesh, piece_vertices);
-                    update_mesh(active_edges, edge_vertices);
-
-                    Mat4 model = translation(pivot);
-                        if (spin_angle != 0.0f)
-                        {
-                            if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
-                            else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
-                            else model = multiply(model, rotation_z(spin_angle));
-                        }
-                    model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
-                    if (fall_offset > 0.0f)
-                    {
-                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
-                    }
-
-                    if (wireframe_active)
-                    {
-                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
-                    }
-                    else
-                    {
-                        draw_mesh(active_mesh, model, p->color, 1.0f);
-                    }
-                    glDepthMask(GL_TRUE);
-                    glEnable(GL_DEPTH_TEST);
-                    glEnable(GL_CULL_FACE);
-                }
-
-                // Ghost projection on landing spot (wireframe, low alpha).
-                if (const auto ghost = game.ghost_piece())
-                {
-                    auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
-                    update_mesh(active_edges, ghost_edges);
-                    glDisable(GL_CULL_FACE);
-                    glDepthMask(GL_FALSE);
-                    draw_mesh(active_edges, identity(), Vec3{1.0f, 1.0f, 1.0f}, 0.32f);
-                    glDepthMask(GL_TRUE);
-                    glEnable(GL_CULL_FACE);
-                }
+                draw_mesh(wall_grid_mesh, identity(), palette.grid, 1.0f);
 
                 // Locked cells.
                 const auto& locked_positions = game.locked_cells();
@@ -999,21 +941,24 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         else model = multiply(model, rotation_z(spin_angle));
                     }
                     model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
-                    if (fall_offset > 0.0f)
+                    fall_offset = (p->pos_y - static_cast<float>(p->pos.y)) * cell_size;
+                    if (fall_offset != 0.0f)
                     {
-                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
+                        model = multiply(model, translation(Vec3{0.f, fall_offset, 0.f}));
                     }
 
                     glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
                     if (wireframe_active)
                     {
                         draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 1.0f);
+                        draw_mesh(active_mesh, model, p->color, 0.7f);
                     }
+                    glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
                 }
@@ -1163,6 +1108,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
                 draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
                 draw_mesh(iso_walls_mesh, identity(), palette.grid, 1.0f);
+                draw_mesh(iso_wall_grid_mesh, identity(), palette.grid, 1.0f);
 
                 if (const auto& p = game.active_piece())
                 {
@@ -1171,16 +1117,34 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     update_mesh(active_mesh, piece_vertices);
                     update_mesh(active_edges, edge_vertices);
 
-                    Mat4 model = identity();
+                    // Compute pivot (world-space centre of piece) for spin animation.
+                    Vec3 iso_pivot{0.f, 0.f, 0.f};
+                    for (const auto& b : p->blocks)
+                    {
+                        Vec3i rb = apply_rot(p->rot, b);
+                        Vec3i c{p->pos.x + rb.x, p->pos.y + rb.y, p->pos.z + rb.z};
+                        Vec3 world = game.well().cell_center(c, cell_size);
+                        iso_pivot.x += world.x;
+                        iso_pivot.y += world.y;
+                        iso_pivot.z += world.z;
+                    }
+                    float iso_inv = 1.0f / static_cast<float>(p->blocks.size());
+                    iso_pivot.x *= iso_inv;
+                    iso_pivot.y *= iso_inv;
+                    iso_pivot.z *= iso_inv;
+
+                    Mat4 model = translation(iso_pivot);
                     if (spin_angle != 0.0f)
                     {
                         if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
                         else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
                         else model = multiply(model, rotation_z(spin_angle));
                     }
-                    if (fall_offset > 0.0f)
+                    model = multiply(model, translation(Vec3{-iso_pivot.x, -iso_pivot.y, -iso_pivot.z}));
+                    fall_offset = (p->pos_y - static_cast<float>(p->pos.y)) * cell_size;
+                    if (fall_offset != 0.0f)
                     {
-                        model = multiply(model, translation(Vec3{0.f, -fall_offset, 0.f}));
+                        model = multiply(model, translation(Vec3{0.f, fall_offset, 0.f}));
                     }
 
                     if (wireframe_active)
@@ -1192,7 +1156,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         Vec3 iso_tint{std::min(p->color.x * 1.1f + 0.05f, 1.0f),
                                       std::min(p->color.y * 1.1f + 0.05f, 1.0f),
                                       std::min(p->color.z * 1.1f + 0.05f, 1.0f)};
-                        draw_mesh(active_mesh, model, iso_tint, 1.0f);
+                        draw_mesh(active_mesh, model, iso_tint, 0.7f);
                     }
                 }
                 // Locked cells.
@@ -1237,27 +1201,42 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
             ImGui::TextUnformatted("Render");
             ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
             ImGui::Separator();
+            ImGui::TextUnformatted("Game");
+            ImGui::Text("Score:  %d", game.score());
+            ImGui::Text("Level:  %d", game.level());
+            ImGui::Text("Lines:  %d", game.total_cleared());
+            ImGui::Text("Last clear: %d", game.last_cleared());
+            ImGui::Text("Fall interval: %.3f s", game.fall_interval());
+            ImGui::Text("Fall speed: %.2f cells/s", game.fall_speed());
+            ImGui::Separator();
             ImGui::TextUnformatted("Well size");
-            ImGui::SliderInt("Width", &desired_width, 3, 10);
+            ImGui::SliderInt("Width", &desired_width, 3, 7);
             desired_width = clamp_width_depth(desired_width);
-            ImGui::SliderInt("Depth", &desired_depth, 3, 10);
+            ImGui::SliderInt("Depth", &desired_depth, 3, 7);
             desired_depth = clamp_width_depth(desired_depth);
-            ImGui::SliderInt("Height", &desired_height, 12, 30);
+            ImGui::SliderInt("Height", &desired_height, 5, 20);
             bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
+            bool level_changed = desired_start_level != config.start_level;
+            ImGui::SliderInt("Start level", &desired_start_level, 0, 9);
             if (ImGui::Button("Apply size") && size_changed)
             {
                 well_width = desired_width;
                 well_depth = desired_depth;
                 well_height = desired_height;
+                config.start_level = desired_start_level;
                 destroy_mesh(floor_mesh);
                 destroy_mesh(walls_mesh);
+                destroy_mesh(wall_grid_mesh);
                 destroy_mesh(bottom_mesh);
                 floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
                 walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
+                wall_grid_mesh = make_mesh(build_well_wall_grid_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
                 destroy_mesh(iso_walls_mesh);
                 iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
+                destroy_mesh(iso_wall_grid_mesh);
+                iso_wall_grid_mesh = make_mesh(build_well_wall_grid_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
                 bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
-                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval};
+                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
                 spin = {};
                 auto_play = {};
                 yaw = 0.0f;
@@ -1267,20 +1246,82 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 iso_needs_reframe = true;
                 dist_iso = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
             }
+            if (ImGui::Button("Apply start level") && level_changed)
+            {
+                config.start_level = desired_start_level;
+                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
+                spin = {};
+                auto_play = {};
+            }
             ImGui::Separator();
             ImGui::TextUnformatted("Controls");
         ImGui::BulletText("Mouse drag: orbit (RMB drag to tilt)");
         ImGui::BulletText("Mouse wheel: zoom");
         ImGui::BulletText("Arrows: move");
-        ImGui::BulletText("E/D: rotate X, W/S: rotate Y, Q/A: rotate Z");
+        ImGui::BulletText("E/D: rotate X, W/S: rotate Z, Q/A: rotate Y");
         ImGui::BulletText("Space: hard drop");
         ImGui::BulletText("F: toggle wireframe");
+        ImGui::BulletText("P: pause / resume");
         ImGui::BulletText("Esc: quit");
             ImGui::Separator();
             ImGui::Checkbox("Auto play", &auto_play.enabled);
             ImGui::Text("Auto steps: %d", auto_play.steps);
         }
         ImGui::End();
+
+        // Game Over overlay
+        if (game.state() == GameState::GameOver)
+        {
+            ImGuiIO& overlay_io = ImGui::GetIO();
+            ImVec2 center{overlay_io.DisplaySize.x * 0.5f * 0.68f,
+                          overlay_io.DisplaySize.y * 0.5f};
+            ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(320, 200), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.88f);
+            ImGuiWindowFlags ov_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
+            if (ImGui::Begin("##gameover", nullptr, ov_flags))
+            {
+                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("GAME OVER").x) * 0.5f);
+                ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, 1.f), "GAME OVER");
+                ImGui::Separator();
+                ImGui::Text("Score:  %d", game.score());
+                ImGui::Text("Level:  %d", game.level());
+                ImGui::Text("Lines:  %d", game.total_cleared());
+                ImGui::Spacing();
+                float btn_w = 120.f;
+                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - btn_w) * 0.5f);
+                if (ImGui::Button("Restart", ImVec2(btn_w, 0)))
+                {
+                    game.restart();
+                    auto_play = {};
+                    spin = {};
+                }
+            }
+            ImGui::End();
+        }
+
+        // Paused overlay
+        if (game.state() == GameState::Paused)
+        {
+            ImGuiIO& overlay_io = ImGui::GetIO();
+            ImVec2 center{overlay_io.DisplaySize.x * 0.5f * 0.68f,
+                          overlay_io.DisplaySize.y * 0.5f};
+            ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(240, 100), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.80f);
+            ImGuiWindowFlags ov_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
+            if (ImGui::Begin("##paused", nullptr, ov_flags))
+            {
+                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("PAUSED").x) * 0.5f);
+                ImGui::TextColored(ImVec4(1.f, 0.85f, 0.2f, 1.f), "PAUSED");
+                ImGui::Spacing();
+                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("Press P to resume").x) * 0.5f);
+                ImGui::TextDisabled("Press P to resume");
+            }
+            ImGui::End();
+        }
 
         ImGui::Render();
         int fb_width = 1;
@@ -1300,7 +1341,10 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     destroy_mesh(cube_mesh);
     destroy_mesh(floor_mesh);
     destroy_mesh(walls_mesh);
+    destroy_mesh(wall_grid_mesh);
     destroy_mesh(bottom_mesh);
+    destroy_mesh(iso_walls_mesh);
+    destroy_mesh(iso_wall_grid_mesh);
     destroy_render_shader(shader);
     glfwDestroyWindow(window);
     glfwTerminate();
