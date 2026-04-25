@@ -937,16 +937,16 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
 
+                // --- Floor plane first so depth is set; lines draw on top (y=0 closer to camera) ---
+                setup_block_shader();
+                draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
+
                 // --- Lines: floor grid + well walls (flat shader) ---
                 glUseProgram(shader.program);
                 glUniform1f(shader.u_emissive, 1.0f);
                 draw_flat(floor_mesh,     identity(), palette.grid, 0.35f);
                 draw_flat(walls_mesh,     identity(), palette.grid, 0.30f);
                 draw_flat(wall_grid_mesh, identity(), palette.grid, 0.12f);
-
-                // --- Floor plane (block shader, dark purple emissive) ---
-                setup_block_shader();
-                draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
 
                 // --- Locked cells: glass faces then bright edges ---
                 const auto& locked_positions = game.locked_cells();
@@ -1209,12 +1209,12 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 
                 glUseProgram(shader.program);
                 glUniform1f(shader.u_emissive, 1.0f);
+                iso_setup_block();
+                iso_draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
+
                 iso_draw_flat(floor_mesh,         identity(), palette.grid, 0.35f);
                 iso_draw_flat(iso_walls_mesh,     identity(), palette.grid, 0.30f);
                 iso_draw_flat(iso_wall_grid_mesh, identity(), palette.grid, 0.12f);
-
-                iso_setup_block();
-                iso_draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
 
                 if (const auto& p = game.active_piece())
                 {
