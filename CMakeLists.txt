@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(FetchContent)
+set(FETCHCONTENT_FULLY_DISCONNECTED TRUE CACHE BOOL "" FORCE)
 
 # GLFW build tweaks to avoid extra artifacts we do not need.
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)

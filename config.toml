@@ -1,0 +1,35 @@
+# Палитра рендера
+[render.palette]
+clear = [0.0, 0.0, 0.0]
+grid = [0.0, 1.0, 0.0]
+outline = [0.92, 0.95, 0.98]
+
+# Цвета фигур (I, O, T, L, J, S, Z, Dot, Bar2)
+[shapes]
+I = [0.0, 1.0, 0.0]
+O = [1.0, 0.0, 0.0]
+T = [0.0, 0.9, 1.0]
+L = [0.0, 0.0, 1.0]
+J = [1.0, 0.75, 0.0]
+S = [1.0, 0.0, 0.8]
+Z = [0.0, 1.0, 0.6]
+Dot = [0.9, 0.9, 0.9]
+Bar2 = [0.5, 0.7, 1.0]
+
+# Размер стакана по умолчанию
+[well]
+width = 6
+depth = 6
+height = 20
+
+# Геймплей
+[gameplay]
+# fall_interval = 6.2  # debug speed; remove comment to override preset default
+start_level = 2
+
+# Пресет (modern|blockout). Для blockout используется data/forms_blockout.dat с центрами фигур, стакан 3x3x18, палитра/скорость как в Blockout.
+[preset]
+name = "blockout"
+# basic|advanced|expert
+blockout_set = "basic"
+# forms_path = "data/forms_blockout.dat"

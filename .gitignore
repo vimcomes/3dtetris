@@ -16,3 +16,10 @@ CMakeCache.txt
 *.log
 .idea/
 .vscode/
+.claude/
+graphify-out/
+.graphifyignore
+CLAUDE.md
+HANDOFF_TO_SONNET.md
+WORKLOG.md
+TODO.md
