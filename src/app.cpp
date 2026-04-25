@@ -489,6 +489,7 @@ int main()
         int steps = 0;
         std::vector<AiPlanStep> plan;
         size_t plan_idx = 0;
+        float plan_piece_top_y = -1.f; // pos_y when plan was built (pieces only fall, so higher = new piece)
     } auto_play;
 
     int prev_total_cleared = 0;
@@ -732,12 +733,20 @@ int main()
     if (auto_play.enabled && game.active_piece())
     {
         auto_play.step_timer += dt;
+        // Invalidate stale plan if a new piece spawned (natural lock before Drop step).
+        // Pieces only fall, so pos_y higher than when plan was built means a new piece appeared.
+        if (!auto_play.plan.empty() && game.active_piece()->pos_y > auto_play.plan_piece_top_y + 0.5f)
+        {
+            auto_play.plan.clear();
+            auto_play.plan_idx = 0;
+        }
         if (auto_play.plan.empty())
         {
             GameAi ai;
             auto_play.plan = ai.compute_plan(game);
             auto_play.plan_idx = 0;
             auto_play.steps = 0;
+            auto_play.plan_piece_top_y = game.active_piece()->pos_y;
         }
         if (!auto_play.plan.empty() && auto_play.plan_idx < auto_play.plan.size() && auto_play.step_timer >= 0.18f)
         {
@@ -1199,6 +1208,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         model = multiply(model, translation(Vec3{0.f, fall_offset, 0.f}));
                     }
 
+                    glDisable(GL_DEPTH_TEST);
+                    glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
                     glUniform1f(shader.u_emissive, 1.5f);
                     if (wireframe_active)
                     {
@@ -1209,6 +1221,9 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         draw_mesh(active_mesh, model, p->color, 0.72f);
                     }
                     glUniform1f(shader.u_emissive, 1.0f);
+                    glDepthMask(GL_TRUE);
+                    glEnable(GL_CULL_FACE);
+                    glEnable(GL_DEPTH_TEST);
                 }
                 // Locked cells.
                 {
