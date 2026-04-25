@@ -56,7 +56,7 @@ inline std::vector<float> build_cube_edge_lines()
 inline std::vector<float> build_floor_grid_lines(int width, int depth, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.0f, 1.0f, 0.0f}; // neon green grid like Blockout
+    float color[3] = {1.0f, 1.0f, 1.0f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -80,7 +80,7 @@ inline std::vector<float> build_floor_grid_lines(int width, int depth, float cel
 inline std::vector<float> build_well_outline_lines(int width, int depth, int height, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.0f, 1.0f, 0.0f}; // neon green walls like Blockout
+    float color[3] = {1.0f, 1.0f, 1.0f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -122,7 +122,7 @@ inline std::vector<float> build_well_outline_lines_culled(int width, int depth, 
 {
     // Same as build_well_outline_lines, but drop the two faces closest to the isometric camera (+X and +Z).
     std::vector<float> data;
-    float color[3] = {0.0f, 1.0f, 0.0f};
+    float color[3] = {1.0f, 1.0f, 1.0f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -164,7 +164,7 @@ inline std::vector<float> build_well_outline_lines_culled(int width, int depth, 
 inline std::vector<float> build_well_wall_grid_lines(int width, int depth, int height, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.0f, 1.0f, 0.0f};
+    float color[3] = {1.0f, 1.0f, 1.0f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
@@ -197,7 +197,7 @@ inline std::vector<float> build_well_wall_grid_lines(int width, int depth, int h
 inline std::vector<float> build_well_wall_grid_lines_culled(int width, int depth, int height, float cell)
 {
     std::vector<float> data;
-    float color[3] = {0.0f, 1.0f, 0.0f};
+    float color[3] = {1.0f, 1.0f, 1.0f};
     float min_x = -0.5f * width * cell;
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
