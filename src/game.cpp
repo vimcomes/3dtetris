@@ -241,7 +241,7 @@ Piece Game::draw_from_bag()
     p.rot[0][0] = 1; p.rot[0][1] = 0; p.rot[0][2] = 0;
     p.rot[1][0] = 0; p.rot[1][1] = 1; p.rot[1][2] = 0;
     p.rot[2][0] = 0; p.rot[2][1] = 0; p.rot[2][2] = 1;
-    p.color = shapes_[shape].color;
+    p.color = k_piece_palette[shape % 7];
 
     const auto& b = bounds_[shape];
     int shape_w = b.max_x - b.min_x + 1;

@@ -9,6 +9,17 @@
 
 enum class GameState { Playing, Paused, GameOver };
 
+// Glassmorphism palette — indexed by (shape % 7).
+inline const Vec3 k_piece_palette[7] = {
+    {0.298f, 0.788f, 0.941f},  // #4CC9F0 cyan
+    {0.969f, 0.145f, 0.522f},  // #F72585 hot pink
+    {0.443f, 0.035f, 0.718f},  // #7209B7 purple
+    {0.263f, 0.380f, 0.933f},  // #4361EE electric blue
+    {0.024f, 0.839f, 0.627f},  // #06D6A0 teal
+    {0.969f, 0.498f, 0.000f},  // #F77F00 orange
+    {0.659f, 0.333f, 0.969f},  // #A855F7 violet
+};
+
 enum class Axis
 {
     X,

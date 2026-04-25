@@ -7,51 +7,50 @@
 
 inline std::vector<float> build_cube_vertices()
 {
-    // 6 faces * 2 triangles * 3 vertices. Each vertex: position xyz, color rgb (white; tinted in shader).
+    // 6 faces * 2 triangles * 3 vertices. Each vertex: position xyz, normal xyz.
+    // Scale 0.88 (half = 0.44) leaves a visible gap between adjacent locked cells.
+    constexpr float h = 0.44f;
     return {
-        // Front (z+)
-        -0.5f, -0.5f, 0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f, 0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f, 0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f, 0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f, 0.5f, 1.f, 1.f, 1.f,
-        -0.5f,  0.5f, 0.5f, 1.f, 1.f, 1.f,
-        // Back (z-)
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f,  0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f, -0.5f, 1.f, 1.f, 1.f,
-        // Left (x-)
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f,  0.5f, 1.f, 1.f, 1.f,
-        -0.5f,  0.5f,  0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f,  0.5f,  0.5f, 1.f, 1.f, 1.f,
-        -0.5f,  0.5f, -0.5f, 1.f, 1.f, 1.f,
-        // Right (x+)
-         0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f,  0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f,  0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f,  0.5f,  0.5f, 1.f, 1.f, 1.f,
-        // Top (y+)
-        -0.5f, 0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f, 0.5f,  0.5f, 1.f, 1.f, 1.f,
-         0.5f, 0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f, 0.5f, -0.5f, 1.f, 1.f, 1.f,
-        -0.5f, 0.5f,  0.5f, 1.f, 1.f, 1.f,
-         0.5f, 0.5f,  0.5f, 1.f, 1.f, 1.f,
-        // Bottom (y-)
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f,  0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f, -0.5f, 1.f, 1.f, 1.f,
-         0.5f, -0.5f,  0.5f, 1.f, 1.f, 1.f,
-        -0.5f, -0.5f,  0.5f, 1.f, 1.f, 1.f,
+        // Front (z+), normal (0,0,1)
+        -h,-h, h,  0,0,1,   h,-h, h,  0,0,1,   h, h, h,  0,0,1,
+        -h,-h, h,  0,0,1,   h, h, h,  0,0,1,  -h, h, h,  0,0,1,
+        // Back (z-), normal (0,0,-1)
+        -h,-h,-h,  0,0,-1,  h, h,-h,  0,0,-1,  h,-h,-h,  0,0,-1,
+        -h,-h,-h,  0,0,-1, -h, h,-h,  0,0,-1,  h, h,-h,  0,0,-1,
+        // Left (x-), normal (-1,0,0)
+        -h,-h,-h, -1,0,0,  -h,-h, h, -1,0,0,  -h, h, h, -1,0,0,
+        -h,-h,-h, -1,0,0,  -h, h, h, -1,0,0,  -h, h,-h, -1,0,0,
+        // Right (x+), normal (1,0,0)
+         h,-h,-h,  1,0,0,   h, h, h,  1,0,0,   h,-h, h,  1,0,0,
+         h,-h,-h,  1,0,0,   h, h,-h,  1,0,0,   h, h, h,  1,0,0,
+        // Top (y+), normal (0,1,0)
+        -h, h,-h,  0,1,0,   h, h, h,  0,1,0,   h, h,-h,  0,1,0,
+        -h, h,-h,  0,1,0,  -h, h, h,  0,1,0,   h, h, h,  0,1,0,
+        // Bottom (y-), normal (0,-1,0)
+        -h,-h,-h,  0,-1,0,  h,-h,-h,  0,-1,0,  h,-h, h,  0,-1,0,
+        -h,-h,-h,  0,-1,0,  h,-h, h,  0,-1,0, -h,-h, h,  0,-1,0,
     };
+}
+
+// 12 box edges of a 0.90-scale cube, white color vertices (for flat line shader).
+inline std::vector<float> build_cube_edge_lines()
+{
+    constexpr float h = 0.45f;
+    std::vector<float> d;
+    d.reserve(12 * 2 * 6);
+    auto e = [&](float x0,float y0,float z0, float x1,float y1,float z1){
+        d.insert(d.end(), {x0,y0,z0, 1,1,1, x1,y1,z1, 1,1,1});
+    };
+    // bottom ring
+    e(-h,-h,-h,  h,-h,-h); e( h,-h,-h,  h,-h, h);
+    e( h,-h, h, -h,-h, h); e(-h,-h, h, -h,-h,-h);
+    // top ring
+    e(-h, h,-h,  h, h,-h); e( h, h,-h,  h, h, h);
+    e( h, h, h, -h, h, h); e(-h, h, h, -h, h,-h);
+    // verticals
+    e(-h,-h,-h, -h, h,-h); e( h,-h,-h,  h, h,-h);
+    e( h,-h, h,  h, h, h); e(-h,-h, h, -h, h, h);
+    return d;
 }
 
 inline std::vector<float> build_floor_grid_lines(int width, int depth, float cell)
@@ -228,14 +227,14 @@ inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
     float max_z = 0.5f * depth * cell;
-    // Two triangles; keep black so the grid lines pop.
+    // Two triangles, normal pointing up (block shader reads location 1 as normal).
     return {
-        min_x, 0.f, min_z, 0.f, 0.f, 0.f,
-        max_x, 0.f, min_z, 0.f, 0.f, 0.f,
-        max_x, 0.f, max_z, 0.f, 0.f, 0.f,
+        min_x, 0.f, min_z, 0.f, 1.f, 0.f,
+        max_x, 0.f, min_z, 0.f, 1.f, 0.f,
+        max_x, 0.f, max_z, 0.f, 1.f, 0.f,
 
-        min_x, 0.f, min_z, 0.f, 0.f, 0.f,
-        max_x, 0.f, max_z, 0.f, 0.f, 0.f,
-        min_x, 0.f, max_z, 0.f, 0.f, 0.f,
+        min_x, 0.f, min_z, 0.f, 1.f, 0.f,
+        max_x, 0.f, max_z, 0.f, 1.f, 0.f,
+        min_x, 0.f, max_z, 0.f, 1.f, 0.f,
     };
 }

@@ -178,8 +178,8 @@ std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& pars
 AppConfig default_config()
 {
     AppConfig cfg;
-    cfg.palette.clear = Vec3{0.f, 0.f, 0.f};
-    cfg.palette.grid = Vec3{0.f, 1.f, 0.f};
+    cfg.palette.clear = Vec3{0.024f, 0.012f, 0.059f};
+    cfg.palette.grid = Vec3{1.0f, 1.0f, 1.0f};
     cfg.palette.outline = Vec3{0.92f, 0.95f, 0.98f};
     cfg.shape_colors = {
         Vec3{0.0f, 1.0f, 0.0f},  // I: green
@@ -422,9 +422,9 @@ AppConfig load_config(const std::string& path)
         cfg.well_width = 3;
         cfg.well_depth = 3;
         cfg.well_height = 18;
-        cfg.palette.grid = Vec3{0.8f, 0.8f, 0.0f};
+        cfg.palette.grid = Vec3{1.0f, 1.0f, 1.0f};
         cfg.palette.outline = Vec3{0.92f, 0.95f, 0.98f};
-        cfg.palette.clear = Vec3{0.f, 0.f, 0.f};
+        cfg.palette.clear = Vec3{0.024f, 0.012f, 0.059f};
         if (!fall_interval_explicit)
         {
             cfg.fall_interval = 0.35f; // closer to their faster baseline

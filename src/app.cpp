@@ -80,19 +80,24 @@ void destroy_mesh(GlMesh& m)
 
 void append_face(std::vector<float>& out, float x0, float y0, float z0, float x1, float y1, float z1, int axis, bool positive)
 {
-    float c[3] = {1.f, 1.f, 1.f};
+    // Write per-face normal (block shader reads location 1 as aNormal).
+    float nx = 0.f, ny = 0.f, nz = 0.f;
+    if      (axis == 0) nx = positive ? 1.f : -1.f;
+    else if (axis == 1) ny = positive ? 1.f : -1.f;
+    else                nz = positive ? 1.f : -1.f;
+
     auto push_quad = [&](float xA, float yA, float zA,
                          float xB, float yB, float zB,
                          float xC, float yC, float zC,
                          float xD, float yD, float zD)
     {
         out.insert(out.end(), {
-            xA, yA, zA, c[0], c[1], c[2],
-            xB, yB, zB, c[0], c[1], c[2],
-            xC, yC, zC, c[0], c[1], c[2],
-            xA, yA, zA, c[0], c[1], c[2],
-            xC, yC, zC, c[0], c[1], c[2],
-            xD, yD, zD, c[0], c[1], c[2],
+            xA, yA, zA, nx, ny, nz,
+            xB, yB, zB, nx, ny, nz,
+            xC, yC, zC, nx, ny, nz,
+            xA, yA, zA, nx, ny, nz,
+            xC, yC, zC, nx, ny, nz,
+            xD, yD, zD, nx, ny, nz,
         });
     };
 
@@ -141,10 +146,9 @@ void append_face(std::vector<float>& out, float x0, float y0, float z0, float x1
     }
 }
 
-std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell_size)
+std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell_size, float block_scale = 0.88f)
 {
     std::vector<float> vertices;
-    // Build a quick adjacency check.
     std::vector<Vec3i> abs_blocks;
     abs_blocks.reserve(p.blocks.size());
     for (auto b : p.blocks)
@@ -161,7 +165,7 @@ std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell
         return false;
     };
 
-    float half = cell_size * 0.5f;
+    float half = cell_size * block_scale * 0.5f;
     for (const auto& c : abs_blocks)
     {
         Vec3 center = well.cell_center(c, cell_size);
@@ -179,7 +183,7 @@ std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell
     return vertices;
 }
 
-std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cell_size)
+std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cell_size, float block_scale = 0.90f)
 {
     std::vector<Vec3i> abs_blocks;
     abs_blocks.reserve(p.blocks.size());
@@ -218,7 +222,7 @@ std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cel
         edges.insert(k);
     };
 
-    float half = cell_size * 0.5f;
+    float half = cell_size * block_scale * 0.5f;
     for (const auto& c : abs_blocks)
     {
         Vec3 center = well.cell_center(c, cell_size);
@@ -413,10 +417,12 @@ int main()
         return std::clamp(v, 3, 7);
     };
     RenderShader shader = create_render_shader();
+    BlockShader block_shader = create_block_shader();
     GradientShader grad_shader = create_gradient_shader();
     RenderPalette palette = config.palette;
 
     auto cube_mesh = make_mesh(build_cube_vertices(), GL_TRIANGLES);
+    auto cube_edges_mesh = make_mesh(build_cube_edge_lines(), GL_LINES);
 
     int well_width = clamp_width_depth(config.well_width);
     int well_depth = clamp_width_depth(config.well_depth);
@@ -441,6 +447,7 @@ int main()
     bool iso_needs_reframe = true;
     ImVec2 iso_prev_size{-1.f, -1.f};
     double prev_time = glfwGetTime();
+    float app_time = 0.0f;
 
     Game game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
     struct Spin
@@ -517,6 +524,17 @@ int main()
         double now = glfwGetTime();
         float dt = static_cast<float>(now - prev_time);
         prev_time = now;
+        app_time += dt;
+
+        // Orbiting light positions (shared by main view and iso view).
+        const float lx0 = std::sin(app_time * 0.3f) * 5.0f;
+        const float lz0 = std::cos(app_time * 0.3f) * 5.0f;
+        const float ly0 = static_cast<float>(well_height) * cell_size * 0.8f;
+        const float li0 = 4.0f + std::sin(app_time * 1.2f) * 0.6f;
+        const float lx1 = -std::sin(app_time * 0.4f) * 5.0f;
+        const float lz1 = -std::cos(app_time * 0.4f) * 5.0f;
+        const float ly1 = static_cast<float>(well_height) * cell_size * 0.5f;
+        const float li1 = 3.5f + std::sin(app_time * 0.9f + 1.0f) * 0.5f;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -807,13 +825,6 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(vx, vy, vw, vh);
-                auto apply_tone = [&](const Vec3& c)
-                {
-                    return Vec3{
-                        std::clamp(c.x, 0.0f, 1.0f),
-                        std::clamp(c.y, 0.0f, 1.0f),
-                        std::clamp(c.z, 0.0f, 1.0f)};
-                };
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 draw_gradient_bg(grad_shader, palette.grad_bottom, palette.grad_top);
 
@@ -890,85 +901,100 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
-                glUseProgram(shader.program);
-                glUniform1f(shader.u_emissive, 1.0f);
+                // Block shader setup (called before any block draw).
+                auto setup_block_shader = [&]() {
+                    glUseProgram(block_shader.program);
+                    glUniform1f(block_shader.u_time, app_time);
+                    glUniform3f(block_shader.u_light0_pos,       lx0, ly0, lz0);
+                    glUniform3f(block_shader.u_light0_color,     0.298f, 0.788f, 0.941f);
+                    glUniform1f(block_shader.u_light0_intensity, li0);
+                    glUniform3f(block_shader.u_light1_pos,       lx1, ly1, lz1);
+                    glUniform3f(block_shader.u_light1_color,     0.969f, 0.145f, 0.522f);
+                    glUniform1f(block_shader.u_light1_intensity, li1);
+                    glUniform3f(block_shader.u_light2_pos,       0.0f, 1.0f, 3.0f);
+                    glUniform3f(block_shader.u_light2_color,     0.443f, 0.035f, 0.718f);
+                    glUniform1f(block_shader.u_light2_intensity, 2.0f);
+                };
 
-                auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
-                {
-                    Vec3 t = apply_tone(tint);
+                auto draw_block = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha, float emissive) {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    glUniformMatrix4fv(block_shader.u_mvp,   1, GL_FALSE, mvp.m.data());
+                    glUniformMatrix4fv(block_shader.u_model, 1, GL_FALSE, model.m.data());
+                    glUniform3f(block_shader.u_tint,   tint.x, tint.y, tint.z);
+                    glUniform1f(block_shader.u_alpha,   alpha);
+                    glUniform1f(block_shader.u_emissive, emissive);
+                    glBindVertexArray(mesh.vao);
+                    glDrawArrays(mesh.mode, 0, mesh.count);
+                };
+
+                auto draw_flat = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha) {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    Vec3 t{std::clamp(tint.x, 0.f,1.f), std::clamp(tint.y, 0.f,1.f), std::clamp(tint.z, 0.f,1.f)};
                     glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
                     glUniform3f(shader.u_tint, t.x, t.y, t.z);
                     glUniform1f(shader.u_alpha, alpha);
                     glBindVertexArray(mesh.vao);
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
-                auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
-                {
-                    Mat4 mvp = multiply(mvp_world, model);
-                    draw_mesh_mvp(mesh, mvp, tint, alpha);
-                };
 
-                draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(walls_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(wall_grid_mesh, identity(), palette.grid, 1.0f);
+                // --- Lines: floor grid + well walls (flat shader) ---
+                glUseProgram(shader.program);
+                glUniform1f(shader.u_emissive, 1.0f);
+                draw_flat(floor_mesh,     identity(), palette.grid, 0.35f);
+                draw_flat(walls_mesh,     identity(), palette.grid, 0.30f);
+                draw_flat(wall_grid_mesh, identity(), palette.grid, 0.12f);
 
-                // Locked cells — flash boost on line clear.
+                // --- Floor plane (block shader, dark purple emissive) ---
+                setup_block_shader();
+                draw_block(bottom_mesh, identity(), Vec3{0.133f, 0.039f, 0.251f}, 0.92f, 1.0f);
+
+                // --- Locked cells: glass faces then bright edges ---
                 const auto& locked_positions = game.locked_cells();
                 const auto& locked_colors = game.locked_colors();
                 {
-                    float locked_emissive = 1.0f;
-                    if (clear_flash_t > 0.f)
-                    {
-                        float t = clear_flash_t / clear_flash_dur;
-                        locked_emissive = 1.0f + t * 3.5f;
-                    }
-                    glUniform1f(shader.u_emissive, locked_emissive);
+                    float flash = clear_flash_t > 0.f ? (1.0f + clear_flash_t / clear_flash_dur * 3.5f) : 1.0f;
+                    // Transparent faces (block shader, depth write off)
+                    glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
+                    setup_block_shader();
                     for (size_t i = 0; i < locked_positions.size(); ++i)
                     {
                         Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                        Mat4 model = translation(world);
-                        Mat4 mvp = multiply(mvp_world, model);
-                        Vec3 t = apply_tone(locked_colors[i]);
-                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                        glUniform3f(shader.u_tint, t.x, t.y, t.z);
-                        glUniform1f(shader.u_alpha, 1.0f);
-                        glBindVertexArray(cube_mesh.vao);
-                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                        draw_block(cube_mesh, translation(world), locked_colors[i], 0.80f, flash);
+                    }
+                    glDepthMask(GL_TRUE);
+                    // Bright box edges (flat shader)
+                    glUseProgram(shader.program);
+                    glUniform1f(shader.u_emissive, 2.5f);
+                    glLineWidth(1.5f);
+                    for (size_t i = 0; i < locked_positions.size(); ++i)
+                    {
+                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
+                        draw_flat(cube_edges_mesh, translation(world), locked_colors[i], 1.0f);
                     }
                     glUniform1f(shader.u_emissive, 1.0f);
-                    // Outline pass.
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                    glLineWidth(1.3f);
-                    for (size_t i = 0; i < locked_positions.size(); ++i)
-                    {
-                        Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                        Mat4 model = translation(world);
-                        Mat4 mvp = multiply(mvp_world, model);
-                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                        glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
-                        glUniform1f(shader.u_alpha, 1.0f);
-                        glBindVertexArray(cube_mesh.vao);
-                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
-                    }
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                    glEnable(GL_CULL_FACE);
                 }
 
-                // Ghost projection on landing spot (wireframe, dim).
+                // --- Ghost piece: faint faces + dim edges ---
                 if (const auto ghost = game.ghost_piece())
                 {
+                    auto ghost_verts = build_piece_mesh(*ghost, game.well(), cell_size);
                     auto ghost_edges = build_piece_edges(*ghost, game.well(), cell_size);
+                    update_mesh(active_mesh, ghost_verts);
                     update_mesh(active_edges, ghost_edges);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    glUniform1f(shader.u_emissive, 0.7f);
-                    draw_mesh(active_edges, identity(), Vec3{1.0f, 1.0f, 1.0f}, 0.32f);
+                    setup_block_shader();
+                    draw_block(active_mesh, identity(), Vec3{1.f, 1.f, 1.f}, 0.08f, 0.3f);
+                    glUseProgram(shader.program);
                     glUniform1f(shader.u_emissive, 1.0f);
+                    draw_flat(active_edges, identity(), Vec3{1.f, 1.f, 1.f}, 0.20f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                 }
 
-                // Active piece drawn last to avoid being covered by filled layers.
+                // --- Active piece: glass faces + bright edges ---
                 if (const auto& p = game.active_piece())
                 {
                     Vec3 pivot{0.f, 0.f, 0.f};
@@ -982,42 +1008,46 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                         pivot.z += world.z;
                     }
                     float inv = 1.0f / static_cast<float>(p->blocks.size());
-                    pivot.x *= inv;
-                    pivot.y *= inv;
-                    pivot.z *= inv;
+                    pivot.x *= inv; pivot.y *= inv; pivot.z *= inv;
 
                     auto piece_vertices = build_piece_mesh(*p, game.well(), cell_size);
-                    auto edge_vertices = build_piece_edges(*p, game.well(), cell_size);
+                    auto edge_vertices  = build_piece_edges(*p, game.well(), cell_size);
                     update_mesh(active_mesh, piece_vertices);
                     update_mesh(active_edges, edge_vertices);
 
                     Mat4 model = translation(pivot);
                     if (spin_angle != 0.0f)
                     {
-                        if (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
+                        if      (spin.axis == Axis::X) model = multiply(model, rotation_x(spin_angle));
                         else if (spin.axis == Axis::Y) model = multiply(model, rotation_y(spin_angle));
-                        else model = multiply(model, rotation_z(spin_angle));
+                        else                           model = multiply(model, rotation_z(spin_angle));
                     }
                     model = multiply(model, translation(Vec3{-pivot.x, -pivot.y, -pivot.z}));
                     fall_offset = (p->pos_y - static_cast<float>(p->pos.y)) * cell_size;
                     if (fall_offset != 0.0f)
-                    {
                         model = multiply(model, translation(Vec3{0.f, fall_offset, 0.f}));
-                    }
 
                     glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    glUniform1f(shader.u_emissive, 1.5f);
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
+                        glUseProgram(shader.program);
+                        glUniform1f(shader.u_emissive, 3.0f);
+                        draw_flat(active_edges, model, p->color, 1.0f);
+                        glUniform1f(shader.u_emissive, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.72f);
+                        // Faces
+                        setup_block_shader();
+                        draw_block(active_mesh, model, p->color, 0.80f, 1.0f);
+                        // Bright edges
+                        glUseProgram(shader.program);
+                        glUniform1f(shader.u_emissive, 3.0f);
+                        draw_flat(active_edges, model, p->color, 1.0f);
+                        glUniform1f(shader.u_emissive, 1.0f);
                     }
-                    glUniform1f(shader.u_emissive, 1.0f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
@@ -1067,13 +1097,6 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 glViewport(vx, vy, vw, vh);
                 glEnable(GL_SCISSOR_TEST);
                 glScissor(vx, vy, vw, vh);
-                auto apply_tone = [&](const Vec3& c)
-                {
-                    return Vec3{
-                        std::clamp(c.x, 0.0f, 1.0f),
-                        std::clamp(c.y, 0.0f, 1.0f),
-                        std::clamp(c.z, 0.0f, 1.0f)};
-                };
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 draw_gradient_bg(grad_shader, palette.grad_bottom, palette.grad_top);
 
@@ -1149,27 +1172,49 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 proj = perspective(55.0f, 1.0f, 0.1f, 120.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
-                glUseProgram(shader.program);
-                glUniform1f(shader.u_emissive, 1.0f);
-                auto draw_mesh_mvp = [&](const GlMesh& mesh, const Mat4& mvp, const Vec3& tint, float alpha)
-                {
-                    Vec3 t = apply_tone(tint);
+                auto iso_draw_block = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha, float emissive) {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    glUseProgram(block_shader.program);
+                    glUniformMatrix4fv(block_shader.u_mvp,   1, GL_FALSE, mvp.m.data());
+                    glUniformMatrix4fv(block_shader.u_model, 1, GL_FALSE, model.m.data());
+                    glUniform3f(block_shader.u_tint,    tint.x, tint.y, tint.z);
+                    glUniform1f(block_shader.u_alpha,   alpha);
+                    glUniform1f(block_shader.u_emissive, emissive);
+                    glBindVertexArray(mesh.vao);
+                    glDrawArrays(mesh.mode, 0, mesh.count);
+                };
+                auto iso_draw_flat = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha) {
+                    Mat4 mvp = multiply(mvp_world, model);
+                    Vec3 t{std::clamp(tint.x,0.f,1.f), std::clamp(tint.y,0.f,1.f), std::clamp(tint.z,0.f,1.f)};
+                    glUseProgram(shader.program);
                     glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
                     glUniform3f(shader.u_tint, t.x, t.y, t.z);
                     glUniform1f(shader.u_alpha, alpha);
                     glBindVertexArray(mesh.vao);
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
-                auto draw_mesh = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha)
-                {
-                    Mat4 mvp = multiply(mvp_world, model);
-                    draw_mesh_mvp(mesh, mvp, tint, alpha);
+                auto iso_setup_block = [&]() {
+                    glUseProgram(block_shader.program);
+                    glUniform1f(block_shader.u_time, app_time);
+                    glUniform3f(block_shader.u_light0_pos,       lx0, ly0, lz0);
+                    glUniform3f(block_shader.u_light0_color,     0.298f, 0.788f, 0.941f);
+                    glUniform1f(block_shader.u_light0_intensity, li0);
+                    glUniform3f(block_shader.u_light1_pos,       lx1, ly1, lz1);
+                    glUniform3f(block_shader.u_light1_color,     0.969f, 0.145f, 0.522f);
+                    glUniform1f(block_shader.u_light1_intensity, li1);
+                    glUniform3f(block_shader.u_light2_pos,       0.0f, 1.0f, 3.0f);
+                    glUniform3f(block_shader.u_light2_color,     0.443f, 0.035f, 0.718f);
+                    glUniform1f(block_shader.u_light2_intensity, 2.0f);
                 };
 
-                draw_mesh(bottom_mesh, identity(), Vec3{0.f, 0.f, 0.f}, 1.0f);
-                draw_mesh(floor_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(iso_walls_mesh, identity(), palette.grid, 1.0f);
-                draw_mesh(iso_wall_grid_mesh, identity(), palette.grid, 1.0f);
+                glUseProgram(shader.program);
+                glUniform1f(shader.u_emissive, 1.0f);
+                iso_draw_flat(floor_mesh,         identity(), palette.grid, 0.35f);
+                iso_draw_flat(iso_walls_mesh,     identity(), palette.grid, 0.30f);
+                iso_draw_flat(iso_wall_grid_mesh, identity(), palette.grid, 0.12f);
+
+                iso_setup_block();
+                iso_draw_block(bottom_mesh, identity(), Vec3{0.133f, 0.039f, 0.251f}, 0.92f, 1.0f);
 
                 if (const auto& p = game.active_piece())
                 {
@@ -1178,7 +1223,6 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     update_mesh(active_mesh, piece_vertices);
                     update_mesh(active_edges, edge_vertices);
 
-                    // Compute pivot (world-space centre of piece) for spin animation.
                     Vec3 iso_pivot{0.f, 0.f, 0.f};
                     for (const auto& b : p->blocks)
                     {
@@ -1211,59 +1255,50 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE);
                     glDepthMask(GL_FALSE);
-                    glUniform1f(shader.u_emissive, 1.5f);
                     if (wireframe_active)
                     {
-                        draw_mesh(active_edges, model, Vec3{1.0f, 1.0f, 1.0f}, 1.0f);
+                        glUseProgram(shader.program);
+                        glUniform1f(shader.u_emissive, 3.0f);
+                        iso_draw_flat(active_edges, model, p->color, 1.0f);
+                        glUniform1f(shader.u_emissive, 1.0f);
                     }
                     else
                     {
-                        draw_mesh(active_mesh, model, p->color, 0.72f);
+                        iso_setup_block();
+                        iso_draw_block(active_mesh, model, p->color, 0.80f, 1.0f);
+                        glUseProgram(shader.program);
+                        glUniform1f(shader.u_emissive, 3.0f);
+                        iso_draw_flat(active_edges, model, p->color, 1.0f);
+                        glUniform1f(shader.u_emissive, 1.0f);
                     }
-                    glUniform1f(shader.u_emissive, 1.0f);
                     glDepthMask(GL_TRUE);
                     glEnable(GL_CULL_FACE);
                     glEnable(GL_DEPTH_TEST);
                 }
-                // Locked cells.
+                // Locked cells (iso view).
                 {
-                    float locked_emissive = 1.0f;
-                    if (clear_flash_t > 0.f)
-                    {
-                        float t = clear_flash_t / clear_flash_dur;
-                        locked_emissive = 1.0f + t * 3.5f;
-                    }
+                    float flash = clear_flash_t > 0.f ? (1.0f + clear_flash_t / clear_flash_dur * 3.5f) : 1.0f;
                     const auto& locked_positions = game.locked_cells();
                     const auto& locked_colors = game.locked_colors();
-                    glUniform1f(shader.u_emissive, locked_emissive);
+                    glDisable(GL_CULL_FACE);
+                    glDepthMask(GL_FALSE);
+                    iso_setup_block();
                     for (size_t i = 0; i < locked_positions.size(); ++i)
                     {
                         Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                        Mat4 model = translation(world);
-                        Mat4 mvp = multiply(mvp_world, model);
-                        Vec3 t = apply_tone(locked_colors[i]);
-                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                        glUniform3f(shader.u_tint, t.x, t.y, t.z);
-                        glUniform1f(shader.u_alpha, 1.0f);
-                        glBindVertexArray(cube_mesh.vao);
-                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                        iso_draw_block(cube_mesh, translation(world), locked_colors[i], 0.80f, flash);
                     }
-                    glUniform1f(shader.u_emissive, 1.0f);
-                    // Edge overlay.
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                    glDepthMask(GL_TRUE);
+                    glUseProgram(shader.program);
+                    glUniform1f(shader.u_emissive, 2.5f);
                     glLineWidth(1.2f);
                     for (size_t i = 0; i < locked_positions.size(); ++i)
                     {
                         Vec3 world = game.well().cell_center(locked_positions[i], cell_size);
-                        Mat4 model = translation(world);
-                        Mat4 mvp = multiply(mvp_world, model);
-                        glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                        glUniform3f(shader.u_tint, palette.outline.x, palette.outline.y, palette.outline.z);
-                        glUniform1f(shader.u_alpha, 1.0f);
-                        glBindVertexArray(cube_mesh.vao);
-                        glDrawArrays(GL_TRIANGLES, 0, cube_mesh.count);
+                        iso_draw_flat(cube_edges_mesh, translation(world), locked_colors[i], 1.0f);
                     }
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                    glUniform1f(shader.u_emissive, 1.0f);
+                    glEnable(GL_CULL_FACE);
                 }
 
                 glBindVertexArray(0);
@@ -1464,6 +1499,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     ImGui::DestroyContext();
 
     destroy_mesh(cube_mesh);
+    destroy_mesh(cube_edges_mesh);
     destroy_mesh(floor_mesh);
     destroy_mesh(walls_mesh);
     destroy_mesh(wall_grid_mesh);
@@ -1471,6 +1507,7 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
     destroy_mesh(iso_walls_mesh);
     destroy_mesh(iso_wall_grid_mesh);
     destroy_render_shader(shader);
+    destroy_block_shader(block_shader);
     destroy_gradient_shader(grad_shader);
     glfwDestroyWindow(window);
     glfwTerminate();

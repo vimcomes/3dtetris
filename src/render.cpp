@@ -113,6 +113,94 @@ void draw_gradient_bg(const GradientShader& gs, const Vec3& bottom, const Vec3& 
     glEnable(GL_DEPTH_TEST);
 }
 
+BlockShader create_block_shader()
+{
+    const char* vs = R"(
+        #version 330 core
+        layout(location = 0) in vec3 aPos;
+        layout(location = 1) in vec3 aNormal;
+        uniform mat4 uMVP;
+        uniform mat4 uModel;
+        out vec3 vWorldPos;
+        out vec3 vNormal;
+        void main()
+        {
+            vec4 world = uModel * vec4(aPos, 1.0);
+            vWorldPos = world.xyz;
+            vNormal = normalize(mat3(uModel) * aNormal);
+            gl_Position = uMVP * vec4(aPos, 1.0);
+        }
+    )";
+
+    const char* fs = R"(
+        #version 330 core
+        in vec3 vWorldPos;
+        in vec3 vNormal;
+        uniform vec3  uTint;
+        uniform float uAlpha;
+        uniform float uEmissive;
+        uniform float uTime;
+        uniform vec3  uLight0Pos;   uniform vec3  uLight0Color;   uniform float uLight0Intensity;
+        uniform vec3  uLight1Pos;   uniform vec3  uLight1Color;   uniform float uLight1Intensity;
+        uniform vec3  uLight2Pos;   uniform vec3  uLight2Color;   uniform float uLight2Intensity;
+        out vec4 FragColor;
+        void main()
+        {
+            vec3 N = normalize(vNormal);
+
+            float breath = 0.4 + sin(uTime * 2.0) * 0.15;
+            vec3 emissive = uTint * breath * uEmissive;
+
+            vec3 lighting = vec3(0.25);
+
+            vec3 L0 = uLight0Pos - vWorldPos;
+            float d0 = length(L0);
+            lighting += uLight0Color * uLight0Intensity
+                        * max(dot(N, L0 / d0), 0.0)
+                        / (1.0 + 0.10 * d0 + 0.015 * d0 * d0);
+
+            vec3 L1 = uLight1Pos - vWorldPos;
+            float d1 = length(L1);
+            lighting += uLight1Color * uLight1Intensity
+                        * max(dot(N, L1 / d1), 0.0)
+                        / (1.0 + 0.10 * d1 + 0.015 * d1 * d1);
+
+            vec3 L2 = uLight2Pos - vWorldPos;
+            float d2 = length(L2);
+            lighting += uLight2Color * uLight2Intensity
+                        * max(dot(N, L2 / d2), 0.0)
+                        / (1.0 + 0.10 * d2 + 0.015 * d2 * d2);
+
+            FragColor = vec4(uTint * lighting + emissive, uAlpha);
+        }
+    )";
+
+    BlockShader s{};
+    s.program = create_program(vs, fs);
+    s.u_mvp               = glGetUniformLocation(s.program, "uMVP");
+    s.u_model             = glGetUniformLocation(s.program, "uModel");
+    s.u_tint              = glGetUniformLocation(s.program, "uTint");
+    s.u_alpha             = glGetUniformLocation(s.program, "uAlpha");
+    s.u_emissive          = glGetUniformLocation(s.program, "uEmissive");
+    s.u_time              = glGetUniformLocation(s.program, "uTime");
+    s.u_light0_pos        = glGetUniformLocation(s.program, "uLight0Pos");
+    s.u_light0_color      = glGetUniformLocation(s.program, "uLight0Color");
+    s.u_light0_intensity  = glGetUniformLocation(s.program, "uLight0Intensity");
+    s.u_light1_pos        = glGetUniformLocation(s.program, "uLight1Pos");
+    s.u_light1_color      = glGetUniformLocation(s.program, "uLight1Color");
+    s.u_light1_intensity  = glGetUniformLocation(s.program, "uLight1Intensity");
+    s.u_light2_pos        = glGetUniformLocation(s.program, "uLight2Pos");
+    s.u_light2_color      = glGetUniformLocation(s.program, "uLight2Color");
+    s.u_light2_intensity  = glGetUniformLocation(s.program, "uLight2Intensity");
+    return s;
+}
+
+void destroy_block_shader(BlockShader& shader)
+{
+    if (shader.program != 0) glDeleteProgram(shader.program);
+    shader = {};
+}
+
 RenderPalette default_render_palette()
 {
     return {};
