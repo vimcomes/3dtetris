@@ -17,7 +17,6 @@ public:
     std::vector<AiPlanStep> compute_plan(const Game& game);
 
 private:
-    static Vec3i rotate_block_local(const Vec3i& v, Axis axis, int dir);
     static bool can_place(const Game& game, const Piece& p);
     static Piece drop_piece(const Game& game, Piece p);
 };

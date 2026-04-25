@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace
 {
@@ -9,19 +10,96 @@ int idx3(int x, int y, int z, int w, int d)
 {
     return y * d * w + z * w + x;
 }
+
+// Mirror of game.cpp rotation matrices (must stay in sync).
+const int ROT_X_POS[3][3] = {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}};
+const int ROT_Y_POS[3][3] = {{0, 0, 1}, {0, 1, 0}, {-1, 0, 0}};
+const int ROT_Z_POS[3][3] = {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}};
+
+// Multiply two 3x3 integer rotation matrices; binarises result to {-1,0,1}.
+// A and B must NOT alias out.
+void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
+{
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+        {
+            int v = 0;
+            for (int k = 0; k < 3; ++k)
+                v += A[i][k] * B[k][j];
+            out[i][j] = (v > 0) ? 1 : (v < 0) ? -1 : 0;
+        }
 }
 
-Vec3i GameAi::rotate_block_local(const Vec3i& v, Axis axis, int dir)
+// In-place: mat = mat * rot (using a temp to avoid aliasing).
+void apply_rot_step(int mat[3][3], const int rot[3][3])
 {
-    int r = (dir >= 0) ? 1 : -1;
-    switch (axis)
-    {
-    case Axis::X: return Vec3i{v.x, r * v.z * -1, r * v.y};
-    case Axis::Y: return Vec3i{r * v.z, v.y, r * -v.x};
-    case Axis::Z: return Vec3i{r * -v.y, r * v.x, v.z};
-    }
-    return v;
+    int tmp[3][3];
+    mul_rot(mat, rot, tmp);
+    std::memcpy(mat, tmp, sizeof(tmp));
 }
+
+bool mat_equal(const int A[3][3], const int B[3][3])
+{
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            if (A[i][j] != B[i][j]) return false;
+    return true;
+}
+
+struct OrientEntry
+{
+    int mat[3][3];
+    std::vector<AiPlanStep> steps; // steps from identity to reach this orientation
+};
+
+// Enumerate all 24 distinct orientations of the cube rotation group.
+// Generates them as (kx rotations of X+) * (ky of Y+) * (kz of Z+),
+// k in {0,1,2,3}. Deduplicates by comparing matrices.
+// The associated steps reproduce each orientation via the same
+// rotate_active(Axis, dir=+1) calls the game uses.
+std::vector<OrientEntry> build_orientations()
+{
+    const int IDENTITY[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    std::vector<OrientEntry> result;
+    result.reserve(24);
+
+    for (int kx = 0; kx < 4; ++kx)
+    {
+        for (int ky = 0; ky < 4; ++ky)
+        {
+            for (int kz = 0; kz < 4; ++kz)
+            {
+                int mat[3][3];
+                std::memcpy(mat, IDENTITY, sizeof(IDENTITY));
+                for (int n = 0; n < kx; ++n) apply_rot_step(mat, ROT_X_POS);
+                for (int n = 0; n < ky; ++n) apply_rot_step(mat, ROT_Y_POS);
+                for (int n = 0; n < kz; ++n) apply_rot_step(mat, ROT_Z_POS);
+
+                // Skip duplicates.
+                bool dup = false;
+                for (const auto& e : result)
+                    if (mat_equal(e.mat, mat)) { dup = true; break; }
+                if (dup) continue;
+
+                OrientEntry entry;
+                std::memcpy(entry.mat, mat, sizeof(mat));
+                for (int n = 0; n < kx; ++n) entry.steps.push_back({AiPlanStep::Type::RotX, 1});
+                for (int n = 0; n < ky; ++n) entry.steps.push_back({AiPlanStep::Type::RotY, 1});
+                for (int n = 0; n < kz; ++n) entry.steps.push_back({AiPlanStep::Type::RotZ, 1});
+                result.push_back(std::move(entry));
+            }
+        }
+    }
+    return result;
+}
+
+const std::vector<OrientEntry>& get_orientations()
+{
+    static std::vector<OrientEntry> cache = build_orientations();
+    return cache;
+}
+
+} // namespace
 
 bool GameAi::can_place(const Game& game, const Piece& p)
 {
@@ -35,97 +113,94 @@ Piece GameAi::drop_piece(const Game& game, Piece p)
         Piece step = p;
         step.pos.y -= 1;
         if (can_place(game, step))
-        {
             p = step;
-        }
         else
-        {
             break;
-        }
     }
     return p;
 }
 
 std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
 {
-    std::vector<AiPlanStep> empty;
-    if (!game.active_piece())
-    {
-        return empty;
-    }
+    if (!game.active_piece()) return {};
     const Piece& active = *game.active_piece();
-    // Generate rotations.
-    std::vector<std::array<int, 3>> rotations = {
-        {0, 0, 0}, {1, 0, 0}, {-1, 0, 0},
-        {0, 1, 0}, {0, -1, 0},
-        {0, 0, 1}, {0, 0, -1},
-    };
+
+    const auto& orientations = get_orientations();
+
+    int w = game.well().width();
+    int d = game.well().depth();
+    int h = game.well().height();
+
+    // Pre-build well occupancy once per plan (shared across all candidates).
+    std::vector<uint8_t> well_occ(w * d * h, 0);
+    for (int yy = 0; yy < h; ++yy)
+        for (int zz = 0; zz < d; ++zz)
+            for (int xx = 0; xx < w; ++xx)
+                if (!game.well().is_free(Vec3i{xx, yy, zz}))
+                    well_occ[idx3(xx, yy, zz, w, d)] = 1;
 
     struct Candidate
     {
-        std::vector<Vec3i> blocks;
+        int orient_idx;
         Vec3i pos;
-        int rx = 0, ry = 0, rz = 0;
-        float score = 0.f;
+        float score;
     };
     std::vector<Candidate> candidates;
 
-    for (auto rot : rotations)
+    for (int oi = 0; oi < static_cast<int>(orientations.size()); ++oi)
     {
-        std::vector<Vec3i> rb = active.blocks;
-        for (auto& b : rb)
-        {
-            b = rotate_block_local(b, Axis::X, rot[0]);
-            b = rotate_block_local(b, Axis::Y, rot[1]);
-            b = rotate_block_local(b, Axis::Z, rot[2]);
-        }
+        const auto& orient = orientations[oi];
+
+        // Compute axis-aligned bounds of the rotated shape.
         int minx = 0, maxx = 0, minz = 0, maxz = 0, miny = 0, maxy = 0;
-        for (auto& b : rb)
+        bool first = true;
+        for (auto b : active.blocks)
         {
-            minx = std::min(minx, b.x); maxx = std::max(maxx, b.x);
-            minz = std::min(minz, b.z); maxz = std::max(maxz, b.z);
-            miny = std::min(miny, b.y); maxy = std::max(maxy, b.y);
-        }
-        for (int x = 0; x < game.well().width(); ++x)
-        {
-            for (int z = 0; z < game.well().depth(); ++z)
+            Vec3i rb = apply_rot(orient.mat, b);
+            if (first)
             {
+                minx = maxx = rb.x;
+                minz = maxz = rb.z;
+                miny = maxy = rb.y;
+                first = false;
+            }
+            else
+            {
+                minx = std::min(minx, rb.x); maxx = std::max(maxx, rb.x);
+                minz = std::min(minz, rb.z); maxz = std::max(maxz, rb.z);
+                miny = std::min(miny, rb.y); maxy = std::max(maxy, rb.y);
+            }
+        }
+        if (first) continue; // empty piece
+
+        for (int x = 0; x < w; ++x)
+        {
+            for (int z = 0; z < d; ++z)
+            {
+                // Build a candidate piece with this orientation and position.
                 Piece p = active;
-                p.blocks = rb;
-                p.pos = Vec3i{x - minx, game.well().height() - 1 - maxy, z - minz};
+                for (int i = 0; i < 3; ++i)
+                    for (int j = 0; j < 3; ++j)
+                        p.rot[i][j] = orient.mat[i][j];
+                // p.blocks stays as active.blocks; can_place uses apply_rot(p.rot, b).
+                p.pos = Vec3i{x - minx, h - 1 - maxy, z - minz};
+
                 p = drop_piece(game, p);
                 if (!can_place(game, p)) continue;
 
-                // Build occupancy.
-                int w = game.well().width();
-                int d = game.well().depth();
-                int h = game.well().height();
-                std::vector<uint8_t> occ(w * d * h, 0);
-                const auto& cells = game.well().cells();
-                for (int yy = 0; yy < h; ++yy)
-                {
-                    for (int zz = 0; zz < d; ++zz)
-                    {
-                        for (int xx = 0; xx < w; ++xx)
-                        {
-                            if (!game.well().is_free(Vec3i{xx, yy, zz}))
-                            {
-                                occ[idx3(xx, yy, zz, w, d)] = 1;
-                            }
-                        }
-                    }
-                }
+                // Build occupancy with the piece dropped in.
+                std::vector<uint8_t> occ = well_occ;
                 for (auto b : p.blocks)
                 {
-                    int xx = p.pos.x + b.x;
-                    int yy = p.pos.y + b.y;
-                    int zz = p.pos.z + b.z;
+                    Vec3i rb = apply_rot(p.rot, b);
+                    int xx = p.pos.x + rb.x;
+                    int yy = p.pos.y + rb.y;
+                    int zz = p.pos.z + rb.z;
                     if (xx >= 0 && xx < w && yy >= 0 && yy < h && zz >= 0 && zz < d)
-                    {
                         occ[idx3(xx, yy, zz, w, d)] = 1;
-                    }
                 }
-                // Heuristic terms.
+
+                // Heuristic evaluation.
                 int full_planes = 0;
                 for (int yy = 0; yy < h; ++yy)
                 {
@@ -133,14 +208,13 @@ std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
                     for (int zz = 0; zz < d && full; ++zz)
                         for (int xx = 0; xx < w; ++xx)
                             if (!occ[idx3(xx, yy, zz, w, d)]) { full = false; break; }
-                    if (full) full_planes++;
+                    if (full) ++full_planes;
                 }
 
                 int max_height = 0;
                 int holes = 0;
                 int agg_height = 0;
                 int bumpiness = 0;
-                // Column heights.
                 std::vector<int> heights(w * d, 0);
                 for (int zz = 0; zz < d; ++zz)
                 {
@@ -158,67 +232,52 @@ std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
                             }
                             else if (filled_seen)
                             {
-                                holes++;
+                                ++holes;
                             }
                         }
                         heights[zz * w + xx] = col_h;
                         agg_height += col_h;
                     }
                 }
-                // Bumpiness across x, z neighbors.
                 for (int zz = 0; zz < d; ++zz)
                 {
                     for (int xx = 0; xx < w; ++xx)
                     {
                         int h0 = heights[zz * w + xx];
-                        if (xx + 1 < w)
-                        {
-                            bumpiness += std::abs(h0 - heights[zz * w + (xx + 1)]);
-                        }
-                        if (zz + 1 < d)
-                        {
-                            bumpiness += std::abs(h0 - heights[(zz + 1) * w + xx]);
-                        }
+                        if (xx + 1 < w) bumpiness += std::abs(h0 - heights[zz * w + (xx + 1)]);
+                        if (zz + 1 < d) bumpiness += std::abs(h0 - heights[(zz + 1) * w + xx]);
                     }
                 }
 
-                float score = 0.f;
-                score += max_height * 5.0f;
-                score += agg_height * 0.5f;
-                score += holes * 50.0f;
-                score += bumpiness * 3.0f;
-                score -= full_planes * 800.0f;
-
-                candidates.push_back({rb, p.pos, rot[0], rot[1], rot[2], score});
+                float score = max_height * 5.0f + agg_height * 0.5f
+                            + holes * 50.0f + bumpiness * 3.0f
+                            - full_planes * 800.0f;
+                candidates.push_back({oi, p.pos, score});
             }
         }
     }
 
-    if (!candidates.empty())
-    {
-        auto best = *std::min_element(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b){ return a.score < b.score; });
-        std::vector<AiPlanStep> plan;
-        auto push_rot = [&](Axis axis, int times)
-        {
-            int t = times;
-            if (t > 0) for (int i = 0; i < t; ++i) plan.push_back({axis == Axis::X ? AiPlanStep::Type::RotX : axis == Axis::Y ? AiPlanStep::Type::RotY : AiPlanStep::Type::RotZ, 1});
-            if (t < 0) for (int i = 0; i < -t; ++i) plan.push_back({axis == Axis::X ? AiPlanStep::Type::RotX : axis == Axis::Y ? AiPlanStep::Type::RotY : AiPlanStep::Type::RotZ, -1});
-        };
-        push_rot(Axis::X, best.rx);
-        push_rot(Axis::Y, best.ry);
-        push_rot(Axis::Z, best.rz);
+    if (candidates.empty()) return {};
 
-        if (const auto& cur = game.active_piece())
-        {
-            int dx = best.pos.x - cur->pos.x;
-            int dz = best.pos.z - cur->pos.z;
-            int step_x = (dx > 0) ? 1 : -1;
-            for (int i = 0; i < std::abs(dx); ++i) plan.push_back({AiPlanStep::Type::MoveX, step_x});
-            int step_z = (dz > 0) ? 1 : -1;
-            for (int i = 0; i < std::abs(dz); ++i) plan.push_back({AiPlanStep::Type::MoveZ, step_z});
-        }
-        plan.push_back({AiPlanStep::Type::Drop, 0});
-        return plan;
+    auto best = *std::min_element(candidates.begin(), candidates.end(),
+        [](const Candidate& a, const Candidate& b) { return a.score < b.score; });
+
+    std::vector<AiPlanStep> plan;
+
+    // Rotation steps that reproduce the chosen orientation from identity.
+    for (const auto& step : orientations[best.orient_idx].steps)
+        plan.push_back(step);
+
+    // Translation steps.
+    if (const auto& cur = game.active_piece())
+    {
+        int dx = best.pos.x - cur->pos.x;
+        int dz = best.pos.z - cur->pos.z;
+        int sx = (dx > 0) ? 1 : -1;
+        for (int i = 0; i < std::abs(dx); ++i) plan.push_back({AiPlanStep::Type::MoveX, sx});
+        int sz = (dz > 0) ? 1 : -1;
+        for (int i = 0; i < std::abs(dz); ++i) plan.push_back({AiPlanStep::Type::MoveZ, sz});
     }
-    return empty;
+    plan.push_back({AiPlanStep::Type::Drop, 0});
+    return plan;
 }
