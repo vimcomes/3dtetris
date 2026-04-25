@@ -6,6 +6,20 @@ A fully 3D take on Blockout-style tetris written in C++20 with OpenGL 3.3. Piece
 ![C++](https://img.shields.io/badge/C%2B%2B-20-informational)
 ![OpenGL](https://img.shields.io/badge/OpenGL-3.3-orange)
 
+## What's new
+
+Reworked the entire rendering pipeline into a **glassmorphism / synthwave** style:
+
+- **Glass blocks** — solid faces replaced with translucent glass (alpha 0.80), rendered without depth writes so overlapping pieces blend correctly.
+- **Phong shading with 3 dynamic coloured lights** — cyan, hot-pink, and purple point lights orbit the well at runtime, lighting each face according to its outward normal.
+- **Emissive breathing pulse** — every block's emissive channel oscillates (`0.4 + sin(t×2) × 0.15`), giving the whole well a slow breathing glow.
+- **Bright wireframe edges** — each block's 12 box edges are drawn as separate GL_LINES at high emissive (2.5–3×), creating a neon-wire outline effect independent of the glass faces.
+- **7-colour neon palette** — active pieces cycle through cyan / hot-pink / purple / electric-blue / teal / orange / violet regardless of config shape colours.
+- **Visible floor plane** — a bright coloured quad closes the bottom of the well, with correct CCW winding so it survives backface culling when viewed from above.
+- **Gradient background** — deep navy-to-purple vertical gradient replaces the flat clear colour.
+- **BFS reachability + 1-piece lookahead AI** — the AI planner was upgraded to verify each candidate placement is reachable (BFS through all moves/rotations) and to score one piece ahead.
+- Custom Dear ImGui neon-cyan theme to match the visual style.
+
 ## Features
 
 - **True 3D rotation** — pieces use integer 3×3 rotation matrices (SO(3) discrete subgroup, 24 unique orientations). No gimbal lock, no drift.
