@@ -23,6 +23,7 @@ struct AppConfig
     int well_width = 10;
     int well_depth = 10;
     int well_height = 20;
+    int start_level = 2;
     float fall_interval = 1.2f;
 };
 

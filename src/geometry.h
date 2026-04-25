@@ -162,6 +162,66 @@ inline std::vector<float> build_well_outline_lines_culled(int width, int depth, 
     return data;
 }
 
+inline std::vector<float> build_well_wall_grid_lines(int width, int depth, int height, float cell)
+{
+    std::vector<float> data;
+    float color[3] = {0.0f, 1.0f, 0.0f};
+    float min_x = -0.5f * width * cell;
+    float min_z = -0.5f * depth * cell;
+    float max_x = 0.5f * width * cell;
+    float max_z = 0.5f * depth * cell;
+    float h = height * cell;
+
+    // Vertical lines on front/back faces for each x.
+    for (int i = 0; i <= width; ++i)
+    {
+        float x = min_x + i * cell;
+        data.insert(data.end(), {x, 0.f, min_z, color[0], color[1], color[2],
+                                 x, h,   min_z, color[0], color[1], color[2]});
+        data.insert(data.end(), {x, 0.f, max_z, color[0], color[1], color[2],
+                                 x, h,   max_z, color[0], color[1], color[2]});
+    }
+
+    // Vertical lines on left/right faces for each z.
+    for (int k = 0; k <= depth; ++k)
+    {
+        float z = min_z + k * cell;
+        data.insert(data.end(), {min_x, 0.f, z, color[0], color[1], color[2],
+                                 min_x, h,   z, color[0], color[1], color[2]});
+        data.insert(data.end(), {max_x, 0.f, z, color[0], color[1], color[2],
+                                 max_x, h,   z, color[0], color[1], color[2]});
+    }
+
+    return data;
+}
+
+inline std::vector<float> build_well_wall_grid_lines_culled(int width, int depth, int height, float cell)
+{
+    std::vector<float> data;
+    float color[3] = {0.0f, 1.0f, 0.0f};
+    float min_x = -0.5f * width * cell;
+    float min_z = -0.5f * depth * cell;
+    float max_x = 0.5f * width * cell;
+    float max_z = 0.5f * depth * cell;
+    float h = height * cell;
+
+    // Only far faces: x = min_x and z = min_z.
+    for (int i = 0; i <= width; ++i)
+    {
+        float x = min_x + i * cell;
+        data.insert(data.end(), {x, 0.f, min_z, color[0], color[1], color[2],
+                                 x, h,   min_z, color[0], color[1], color[2]});
+    }
+    for (int k = 0; k <= depth; ++k)
+    {
+        float z = min_z + k * cell;
+        data.insert(data.end(), {min_x, 0.f, z, color[0], color[1], color[2],
+                                 min_x, h,   z, color[0], color[1], color[2]});
+    }
+
+    return data;
+}
+
 inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
 {
     float min_x = -0.5f * width * cell;

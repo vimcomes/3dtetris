@@ -196,6 +196,7 @@ AppConfig default_config()
     cfg.well_depth = 6;
     cfg.preset = "blockout";
     cfg.blockout_set = "basic";
+    cfg.start_level = 2;
     cfg.shapes = build_modern_shapes(cfg.shape_colors);
     return cfg;
 }
@@ -356,6 +357,15 @@ AppConfig load_config(const std::string& path)
         }
         else if (section == "gameplay")
         {
+            if (key == "start_level")
+            {
+                int v = 0;
+                if (parse_int(value, v))
+                {
+                    cfg.start_level = std::clamp(v, 0, 9);
+                }
+                continue;
+            }
             float v = 0.f;
             if (!parse_float(value, v))
             {
