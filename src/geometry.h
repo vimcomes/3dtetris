@@ -227,14 +227,15 @@ inline std::vector<float> build_bottom_plane(int width, int depth, float cell)
     float min_z = -0.5f * depth * cell;
     float max_x = 0.5f * width * cell;
     float max_z = 0.5f * depth * cell;
-    // Two triangles, normal pointing up (block shader reads location 1 as normal).
+    // CCW winding viewed from above → normal (0,+1,0) front-face visible from y+.
+    // Triangle 1: A,C,B  Triangle 2: A,D,C
     return {
         min_x, 0.f, min_z, 0.f, 1.f, 0.f,
-        max_x, 0.f, min_z, 0.f, 1.f, 0.f,
         max_x, 0.f, max_z, 0.f, 1.f, 0.f,
+        max_x, 0.f, min_z, 0.f, 1.f, 0.f,
 
         min_x, 0.f, min_z, 0.f, 1.f, 0.f,
-        max_x, 0.f, max_z, 0.f, 1.f, 0.f,
         min_x, 0.f, max_z, 0.f, 1.f, 0.f,
+        max_x, 0.f, max_z, 0.f, 1.f, 0.f,
     };
 }

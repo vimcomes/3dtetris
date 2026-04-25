@@ -937,9 +937,11 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                     glDrawArrays(mesh.mode, 0, mesh.count);
                 };
 
-                // --- Floor plane first so depth is set; lines draw on top (y=0 closer to camera) ---
+                // --- Floor plane first (depth set here; grid lines at y=0 draw on top) ---
                 setup_block_shader();
-                draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 0.90f, 2.0f);
+                glDisable(GL_CULL_FACE);
+                draw_block(bottom_mesh, translation(Vec3{0.f, -0.02f, 0.f}), Vec3{0.55f, 0.05f, 0.95f}, 1.0f, 3.0f);
+                glEnable(GL_CULL_FACE);
 
                 // --- Lines: floor grid + well walls (flat shader) ---
                 glUseProgram(shader.program);
