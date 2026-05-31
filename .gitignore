@@ -23,5 +23,5 @@ CLAUDE.md
 HANDOFF_TO_SONNET.md
 WORKLOG.md
 TODO.md
-*.ini
-*.md
+imgui.ini
+highscore.txt
