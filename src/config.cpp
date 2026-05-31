@@ -175,6 +175,8 @@ std::vector<ShapeDef> convert_blockout_forms(const std::vector<ParsedForm>& pars
     return defs;
 }
 
+} // namespace
+
 AppConfig default_config()
 {
     AppConfig cfg;
@@ -182,15 +184,15 @@ AppConfig default_config()
     cfg.palette.grid = Vec3{1.0f, 1.0f, 1.0f};
     cfg.palette.outline = Vec3{0.92f, 0.95f, 0.98f};
     cfg.shape_colors = {
-        Vec3{0.0f, 1.0f, 0.0f},  // I: green
-        Vec3{1.0f, 0.0f, 0.0f},  // O: red
-        Vec3{0.0f, 0.9f, 1.0f},  // T: cyan
-        Vec3{0.0f, 0.0f, 1.0f},  // L: blue
-        Vec3{1.0f, 0.75f, 0.0f}, // J: orange/yellow
-        Vec3{1.0f, 0.0f, 0.8f},  // S: magenta
-        Vec3{0.0f, 1.0f, 0.6f},  // Z: aqua green
-        Vec3{0.9f, 0.9f, 0.9f},  // Dot 1x1x1
-        Vec3{0.5f, 0.7f, 1.0f},  // Bar2 1x1x2
+        Vec3{0.298f, 0.788f, 0.941f},
+        Vec3{0.969f, 0.145f, 0.522f},
+        Vec3{0.443f, 0.035f, 0.718f},
+        Vec3{0.263f, 0.380f, 0.933f},
+        Vec3{0.024f, 0.839f, 0.627f},
+        Vec3{0.969f, 0.498f, 0.000f},
+        Vec3{0.659f, 0.333f, 0.969f},
+        Vec3{0.298f, 0.788f, 0.941f},
+        Vec3{0.969f, 0.145f, 0.522f},
     };
     cfg.well_width = 6;
     cfg.well_depth = 6;
@@ -200,6 +202,8 @@ AppConfig default_config()
     cfg.shapes = build_modern_shapes(cfg.shape_colors);
     return cfg;
 }
+
+namespace {
 
 std::string trim(const std::string& s)
 {
@@ -404,6 +408,40 @@ AppConfig load_config(const std::string& path)
                     cfg.blockout_set = cfg.blockout_set.substr(1, cfg.blockout_set.size() - 2);
                 }
             }
+        }
+        else if (section == "ai")
+        {
+            float v = 0.f;
+            if (!parse_float(value, v)) continue;
+            if (key == "weight_max_height") cfg.ai.weight_max_height = v;
+            else if (key == "weight_agg_height") cfg.ai.weight_agg_height = v;
+            else if (key == "weight_holes") cfg.ai.weight_holes = v;
+            else if (key == "weight_bumpiness") cfg.ai.weight_bumpiness = v;
+        }
+        else if (section == "controls")
+        {
+            auto unquote = [](std::string s) -> std::string
+            {
+                s = trim(s);
+                if (!s.empty() && s.front() == '"' && s.back() == '"')
+                    s = s.substr(1, s.size() - 2);
+                return s;
+            };
+            if (key == "move_left") cfg.controls.move_left = unquote(value);
+            else if (key == "move_right") cfg.controls.move_right = unquote(value);
+            else if (key == "move_forward") cfg.controls.move_forward = unquote(value);
+            else if (key == "move_back") cfg.controls.move_back = unquote(value);
+            else if (key == "rot_x_pos") cfg.controls.rot_x_pos = unquote(value);
+            else if (key == "rot_x_neg") cfg.controls.rot_x_neg = unquote(value);
+            else if (key == "rot_z_pos") cfg.controls.rot_z_pos = unquote(value);
+            else if (key == "rot_z_neg") cfg.controls.rot_z_neg = unquote(value);
+            else if (key == "rot_y_pos") cfg.controls.rot_y_pos = unquote(value);
+            else if (key == "rot_y_neg") cfg.controls.rot_y_neg = unquote(value);
+            else if (key == "hard_drop") cfg.controls.hard_drop = unquote(value);
+            else if (key == "soft_drop") cfg.controls.soft_drop = unquote(value);
+            else if (key == "hold") cfg.controls.hold = unquote(value);
+            else if (key == "wireframe") cfg.controls.wireframe = unquote(value);
+            else if (key == "pause") cfg.controls.pause = unquote(value);
         }
     }
 

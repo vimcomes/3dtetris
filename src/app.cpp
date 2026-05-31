@@ -23,306 +23,13 @@
 #include "math.h"
 #include "config.h"
 #include "render.h"
-
-namespace
-{
-struct GlMesh
-{
-    GLuint vao = 0;
-    GLuint vbo = 0;
-    GLsizei count = 0;
-    GLenum mode = GL_TRIANGLES;
-};
-
-GlMesh make_empty_mesh(GLenum mode = GL_TRIANGLES)
-{
-    GlMesh mesh;
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(0));
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
-    mesh.mode = mode;
-    return mesh;
-}
-
-GlMesh make_mesh(const std::vector<float>& data, GLenum mode)
-{
-    GlMesh mesh = make_empty_mesh(mode);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_STATIC_DRAW);
-    mesh.count = static_cast<GLsizei>(data.size() / 6);
-    mesh.mode = mode;
-    return mesh;
-}
-
-void update_mesh(GlMesh& mesh, const std::vector<float>& data)
-{
-    if (mesh.vao == 0 || mesh.vbo == 0)
-    {
-        mesh = make_empty_mesh(mesh.mode);
-    }
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
-    mesh.count = static_cast<GLsizei>(data.size() / 6);
-}
-
-void destroy_mesh(GlMesh& m)
-{
-    if (m.vao != 0) glDeleteVertexArrays(1, &m.vao);
-    if (m.vbo != 0) glDeleteBuffers(1, &m.vbo);
-    m = {};
-}
-
-void append_face(std::vector<float>& out, float x0, float y0, float z0, float x1, float y1, float z1, int axis, bool positive)
-{
-    // Write per-face normal (block shader reads location 1 as aNormal).
-    float nx = 0.f, ny = 0.f, nz = 0.f;
-    if      (axis == 0) nx = positive ? 1.f : -1.f;
-    else if (axis == 1) ny = positive ? 1.f : -1.f;
-    else                nz = positive ? 1.f : -1.f;
-
-    auto push_quad = [&](float xA, float yA, float zA,
-                         float xB, float yB, float zB,
-                         float xC, float yC, float zC,
-                         float xD, float yD, float zD)
-    {
-        out.insert(out.end(), {
-            xA, yA, zA, nx, ny, nz,
-            xB, yB, zB, nx, ny, nz,
-            xC, yC, zC, nx, ny, nz,
-            xA, yA, zA, nx, ny, nz,
-            xC, yC, zC, nx, ny, nz,
-            xD, yD, zD, nx, ny, nz,
-        });
-    };
-
-    // axis: 0=x,1=y,2=z. Maintain CCW winding for outward normals.
-    if (axis == 0)
-    {
-        float x = positive ? x1 : x0;
-        if (positive)
-        {
-            // +X face
-            push_quad(x, y0, z0, x, y1, z0, x, y1, z1, x, y0, z1);
-        }
-        else
-        {
-            // -X face
-            push_quad(x, y0, z0, x, y0, z1, x, y1, z1, x, y1, z0);
-        }
-    }
-    else if (axis == 1)
-    {
-        float y = positive ? y1 : y0;
-        if (positive)
-        {
-            // +Y face (top)
-            push_quad(x0, y, z0, x0, y, z1, x1, y, z1, x1, y, z0);
-        }
-        else
-        {
-            // -Y face (bottom)
-            push_quad(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1);
-        }
-    }
-    else
-    {
-        float z = positive ? z1 : z0;
-        if (positive)
-        {
-            // +Z face (front)
-            push_quad(x0, y0, z, x1, y0, z, x1, y1, z, x0, y1, z);
-        }
-        else
-        {
-            // -Z face (back)
-            push_quad(x0, y0, z, x0, y1, z, x1, y1, z, x1, y0, z);
-        }
-    }
-}
-
-std::vector<float> build_piece_mesh(const Piece& p, const Well& well, float cell_size, float block_scale = 0.88f)
-{
-    std::vector<float> vertices;
-    std::vector<Vec3i> abs_blocks;
-    abs_blocks.reserve(p.blocks.size());
-    for (auto b : p.blocks)
-    {
-        Vec3i rb = apply_rot(p.rot, b);
-        abs_blocks.push_back(Vec3i{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z});
-    }
-    auto has_block = [&](const Vec3i& q)
-    {
-        for (const auto& b : abs_blocks)
-        {
-            if (b.x == q.x && b.y == q.y && b.z == q.z) return true;
-        }
-        return false;
-    };
-
-    float half = cell_size * block_scale * 0.5f;
-    for (const auto& c : abs_blocks)
-    {
-        Vec3 center = well.cell_center(c, cell_size);
-        float x0 = center.x - half, x1 = center.x + half;
-        float y0 = center.y - half, y1 = center.y + half;
-        float z0 = center.z - half, z1 = center.z + half;
-
-        if (!has_block(Vec3i{c.x + 1, c.y, c.z})) append_face(vertices, x0, y0, z0, x1, y1, z1, 0, true);
-        if (!has_block(Vec3i{c.x - 1, c.y, c.z})) append_face(vertices, x0, y0, z0, x1, y1, z1, 0, false);
-        if (!has_block(Vec3i{c.x, c.y + 1, c.z})) append_face(vertices, x0, y0, z0, x1, y1, z1, 1, true);
-        if (!has_block(Vec3i{c.x, c.y - 1, c.z})) append_face(vertices, x0, y0, z0, x1, y1, z1, 1, false);
-        if (!has_block(Vec3i{c.x, c.y, c.z + 1})) append_face(vertices, x0, y0, z0, x1, y1, z1, 2, true);
-        if (!has_block(Vec3i{c.x, c.y, c.z - 1})) append_face(vertices, x0, y0, z0, x1, y1, z1, 2, false);
-    }
-    return vertices;
-}
-
-std::vector<float> build_piece_edges(const Piece& p, const Well& well, float cell_size, float block_scale = 0.90f)
-{
-    std::vector<Vec3i> abs_blocks;
-    abs_blocks.reserve(p.blocks.size());
-    for (auto b : p.blocks)
-    {
-        Vec3i rb = apply_rot(p.rot, b);
-        abs_blocks.push_back(Vec3i{p.pos.x + rb.x, p.pos.y + rb.y, p.pos.z + rb.z});
-    }
-    auto has_block = [&](const Vec3i& q)
-    {
-        for (const auto& b : abs_blocks)
-        {
-            if (b.x == q.x && b.y == q.y && b.z == q.z) return true;
-        }
-        return false;
-    };
-
-    struct EdgeKey
-    {
-        std::array<float, 6> v{};
-        bool operator<(const EdgeKey& other) const { return v < other.v; }
-    };
-    std::set<EdgeKey> edges;
-
-    auto add_edge = [&](const Vec3& a, const Vec3& b)
-    {
-        EdgeKey k{};
-        if (a.x < b.x || (a.x == b.x && (a.y < b.y || (a.y == b.y && a.z <= b.z))))
-        {
-            k.v = {a.x, a.y, a.z, b.x, b.y, b.z};
-        }
-        else
-        {
-            k.v = {b.x, b.y, b.z, a.x, a.y, a.z};
-        }
-        edges.insert(k);
-    };
-
-    float half = cell_size * block_scale * 0.5f;
-    for (const auto& c : abs_blocks)
-    {
-        Vec3 center = well.cell_center(c, cell_size);
-        float x0 = center.x - half, x1 = center.x + half;
-        float y0 = center.y - half, y1 = center.y + half;
-        float z0 = center.z - half, z1 = center.z + half;
-
-        auto add_face_edges = [&](int axis, bool positive)
-        {
-            if (axis == 0)
-            {
-                float x = positive ? x1 : x0;
-                Vec3 a{x, y0, z0}, b{x, y1, z0}, c1{x, y1, z1}, d{x, y0, z1};
-                add_edge(a, b);
-                add_edge(b, c1);
-                add_edge(c1, d);
-                add_edge(d, a);
-            }
-            else if (axis == 1)
-            {
-                float y = positive ? y1 : y0;
-                Vec3 a{x0, y, z0}, b{x1, y, z0}, c1{x1, y, z1}, d{x0, y, z1};
-                add_edge(a, b);
-                add_edge(b, c1);
-                add_edge(c1, d);
-                add_edge(d, a);
-            }
-            else
-            {
-                float z = positive ? z1 : z0;
-                Vec3 a{x0, y0, z}, b{x1, y0, z}, c1{x1, y1, z}, d{x0, y1, z};
-                add_edge(a, b);
-                add_edge(b, c1);
-                add_edge(c1, d);
-                add_edge(d, a);
-            }
-        };
-
-        if (!has_block(Vec3i{c.x + 1, c.y, c.z})) add_face_edges(0, true);
-        if (!has_block(Vec3i{c.x - 1, c.y, c.z})) add_face_edges(0, false);
-        if (!has_block(Vec3i{c.x, c.y + 1, c.z})) add_face_edges(1, true);
-        if (!has_block(Vec3i{c.x, c.y - 1, c.z})) add_face_edges(1, false);
-        if (!has_block(Vec3i{c.x, c.y, c.z + 1})) add_face_edges(2, true);
-        if (!has_block(Vec3i{c.x, c.y, c.z - 1})) add_face_edges(2, false);
-    }
-
-    std::vector<float> out;
-    out.reserve(edges.size() * 12);
-    for (const auto& e : edges)
-    {
-        out.push_back(e.v[0]); out.push_back(e.v[1]); out.push_back(e.v[2]); out.push_back(1.f); out.push_back(1.f); out.push_back(1.f);
-        out.push_back(e.v[3]); out.push_back(e.v[4]); out.push_back(e.v[5]); out.push_back(1.f); out.push_back(1.f); out.push_back(1.f);
-    }
-    return out;
-}
-
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    (void)window;
-    glViewport(0, 0, width, height);
-}
-
-static double g_scroll_delta = 0.0;
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-    g_scroll_delta += yoffset;
-    ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
-}
-
-bool init_glfw()
-{
-    if (glfwInit() == GLFW_FALSE)
-    {
-        std::cerr << "Failed to initialize GLFW\n";
-        return false;
-    }
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
-
-    return true;
-}
-
-bool init_glad()
-{
-    if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0)
-    {
-        std::cerr << "Failed to load OpenGL functions via GLAD\n";
-        return false;
-    }
-    return true;
-}
-} // namespace
+#include "gfx/mesh.h"
+#include "input.h"
+#include "app_state.h"
+#include "gfx/renderer.h"
+#include "scores.h"
+#include "ui/hud.h"
+#include "ui/panels.h"
 
 int main()
 {
@@ -353,45 +60,8 @@ int main()
         return EXIT_FAILURE;
     }
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ui::init_imgui(window);
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding   = 8.0f;
-    style.FrameRounding    = 4.0f;
-    style.GrabRounding     = 4.0f;
-    style.PopupRounding    = 4.0f;
-    style.ScrollbarRounding = 4.0f;
-    style.TabRounding      = 4.0f;
-    style.WindowPadding    = ImVec2(12, 12);
-    style.FramePadding     = ImVec2(8, 5);
-    style.ItemSpacing      = ImVec2(10, 7);
-    style.WindowBorderSize = 0.0f;
-    // Transparent BG for GL viewport and iso windows; Controls gets its own push.
-    style.Colors[ImGuiCol_WindowBg]        = ImVec4(0.f, 0.f, 0.f, 0.f);
-    style.Colors[ImGuiCol_ChildBg]         = ImVec4(0.f, 0.f, 0.f, 0.f);
-    style.Colors[ImGuiCol_DockingEmptyBg]  = ImVec4(0.f, 0.f, 0.f, 0.f);
-    // Neon cyan accent
-    style.Colors[ImGuiCol_Text]            = ImVec4(0.88f, 0.95f, 1.00f, 1.0f);
-    style.Colors[ImGuiCol_Button]          = ImVec4(0.08f, 0.28f, 0.42f, 0.90f);
-    style.Colors[ImGuiCol_ButtonHovered]   = ImVec4(0.12f, 0.52f, 0.72f, 1.00f);
-    style.Colors[ImGuiCol_ButtonActive]    = ImVec4(0.05f, 0.70f, 0.90f, 1.00f);
-    style.Colors[ImGuiCol_SliderGrab]      = ImVec4(0.00f, 0.75f, 0.90f, 1.00f);
-    style.Colors[ImGuiCol_SliderGrabActive]= ImVec4(0.00f, 0.90f, 1.00f, 1.00f);
-    style.Colors[ImGuiCol_CheckMark]       = ImVec4(0.00f, 0.90f, 1.00f, 1.00f);
-    style.Colors[ImGuiCol_FrameBg]         = ImVec4(0.06f, 0.10f, 0.18f, 0.90f);
-    style.Colors[ImGuiCol_FrameBgHovered]  = ImVec4(0.08f, 0.18f, 0.32f, 0.90f);
-    style.Colors[ImGuiCol_Header]          = ImVec4(0.00f, 0.50f, 0.72f, 0.45f);
-    style.Colors[ImGuiCol_HeaderHovered]   = ImVec4(0.00f, 0.68f, 0.88f, 0.60f);
-    style.Colors[ImGuiCol_Separator]       = ImVec4(0.00f, 0.45f, 0.65f, 0.50f);
-    style.Colors[ImGuiCol_TitleBg]         = ImVec4(0.04f, 0.04f, 0.10f, 1.00f);
-    style.Colors[ImGuiCol_TitleBgActive]   = ImVec4(0.04f, 0.10f, 0.18f, 1.00f);
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
-    // Replace ImGui-installed scroll callback with our chaining version.
-    glfwSetScrollCallback(window, scroll_callback);
 
     glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -450,14 +120,7 @@ int main()
     float app_time = 0.0f;
 
     Game game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
-    struct Spin
-    {
-        bool active = false;
-        Axis axis = Axis::Y;
-        int dir = 1;
-        float t = 0.f;
-        float duration = 0.15f;
-    } spin;
+    SpinState spin;
 
     struct KeyState
     {
@@ -489,15 +152,7 @@ int main()
     bool dock_built = false;
     struct ViewportRect { float x0 = 0.f, y0 = 0.f, x1 = static_cast<float>(start_width), y1 = static_cast<float>(start_height); } viewport_rect;
 
-    struct AutoPlay
-    {
-        bool enabled = false;
-        float step_timer = 0.f;
-        int steps = 0;
-        std::vector<AiPlanStep> plan;
-        size_t plan_idx = 0;
-        float plan_piece_top_y = -1.f; // pos_y when plan was built (pieces only fall, so higher = new piece)
-    } auto_play;
+    AutoPlayState auto_play;
 
     int prev_total_cleared = 0;
     float clear_flash_t = 0.f;
@@ -507,6 +162,8 @@ int main()
     int desired_depth = well_depth;
     int desired_height = well_height;
     int desired_start_level = config.start_level;
+
+    int high_score = load_high_score("highscore.txt");
 
     std::cout << "Controls:\n"
                  "  Mouse drag: orbit (RMB drag to tilt)\n"
@@ -540,25 +197,8 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGuiDockNodeFlags dock_flags = ImGuiDockNodeFlags_PassthruCentralNode;
-        ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dock_flags);
-        if (!dock_built)
-        {
-            ImGui::DockBuilderRemoveNode(dockspace_id);
-            ImGui::DockBuilderAddNode(dockspace_id, dock_flags | ImGuiDockNodeFlags_DockSpace);
-            ImGui::DockBuilderSetNodeSize(dockspace_id, io.DisplaySize);
-            ImGuiID right_id = 0;
-            ImGuiID left_id = dockspace_id;
-            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.32f, &right_id, &left_id);
-            ImGuiID right_bottom = 0;
-            ImGuiID right_top = right_id;
-            ImGui::DockBuilderSplitNode(right_id, ImGuiDir_Down, 0.5f, &right_bottom, &right_top);
-            ImGui::DockBuilderDockWindow("Controls", right_top);
-            ImGui::DockBuilderDockWindow("Iso View", right_bottom);
-            ImGui::DockBuilderDockWindow("Viewport", left_id);
-            ImGui::DockBuilderFinish(dockspace_id);
-            dock_built = true;
-        }
+        ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+        ui::build_dockspace(dock_built, dockspace_id, io.DisplaySize);
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
@@ -630,8 +270,7 @@ int main()
 
         // Camera zoom via mouse wheel; pitch adjusted via RMB drag.
         const float zoom_speed = 3.0f;
-        double scroll = g_scroll_delta;
-        g_scroll_delta = 0.0;
+        double scroll = consume_scroll_delta();
         if (scroll != 0.0)
         {
             distance = std::clamp(distance - static_cast<float>(scroll) * zoom_speed, 4.0f, 40.0f);
@@ -639,42 +278,45 @@ int main()
 
         // Piece input with edge detection for rotations/drop.
         auto is_down = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
-        bool left_now = is_down(GLFW_KEY_LEFT);
-        bool right_now = is_down(GLFW_KEY_RIGHT);
-        bool up_now = is_down(GLFW_KEY_UP);
-        bool down_now = is_down(GLFW_KEY_DOWN);
-        bool q_now = is_down(GLFW_KEY_Q);
-        bool a_now = is_down(GLFW_KEY_A);
-        bool w_now = is_down(GLFW_KEY_W);
-        bool s_now = is_down(GLFW_KEY_S);
-        bool e_now = is_down(GLFW_KEY_E);
-        bool d_now = is_down(GLFW_KEY_D);
-        bool space_now = is_down(GLFW_KEY_SPACE);
-        bool f_now = is_down(GLFW_KEY_F);
-        bool p_now = is_down(GLFW_KEY_P);
+        auto key_down = [&](const std::string& name) { return is_down(key_name_to_glfw(name)); };
+        bool left_now = key_down(config.controls.move_left);
+        bool right_now = key_down(config.controls.move_right);
+        bool up_now = key_down(config.controls.move_forward);
+        bool down_now = key_down(config.controls.move_back);
+        bool rot_xp_now = key_down(config.controls.rot_x_pos);
+        bool rot_xn_now = key_down(config.controls.rot_x_neg);
+        bool rot_zp_now = key_down(config.controls.rot_z_pos);
+        bool rot_zn_now = key_down(config.controls.rot_z_neg);
+        bool rot_yp_now = key_down(config.controls.rot_y_pos);
+        bool rot_yn_now = key_down(config.controls.rot_y_neg);
+        bool space_now = key_down(config.controls.hard_drop);
+        bool v_now = key_down(config.controls.soft_drop);
+        bool c_now = key_down(config.controls.hold);
+        bool f_now = key_down(config.controls.wireframe);
+        bool p_now = key_down(config.controls.pause);
 
         // Rotations (Blockout-style) — only when game is active
-        if (!io.WantCaptureKeyboard && viewport_hot && e_now && !prev_keys.rot_x_pos && game.state() == GameState::Playing && game.rotate_active(Axis::X, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_xp_now && !prev_keys.rot_x_pos && game.state() == GameState::Playing && game.rotate_active(Axis::X, 1))
         {
             spin = {true, Axis::X, 1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && d_now && !prev_keys.rot_x_neg && game.state() == GameState::Playing && game.rotate_active(Axis::X, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_xn_now && !prev_keys.rot_x_neg && game.state() == GameState::Playing && game.rotate_active(Axis::X, -1))
         {
             spin = {true, Axis::X, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && w_now && !prev_keys.rot_y_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Z, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_zp_now && !prev_keys.rot_z_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Z, 1))
         {
             spin = {true, Axis::Z, 1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && s_now && !prev_keys.rot_y_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Z, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_zn_now && !prev_keys.rot_z_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Z, -1))
         {
             spin = {true, Axis::Z, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && q_now && !prev_keys.rot_z_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Y, -1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_yp_now && !prev_keys.rot_y_pos && game.state() == GameState::Playing && game.rotate_active(Axis::Y, -1))
         {
             spin = {true, Axis::Y, -1, 0.f, 1.0f / 3.0f};
         }
-        if (!io.WantCaptureKeyboard && viewport_hot && a_now && !prev_keys.rot_z_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Y, 1))
+        if (!io.WantCaptureKeyboard && viewport_hot && rot_yn_now && !prev_keys.rot_y_neg && game.state() == GameState::Playing && game.rotate_active(Axis::Y, 1))
         {
             spin = {true, Axis::Y, 1, 0.f, 1.0f / 3.0f};
         }
@@ -721,7 +363,15 @@ int main()
                 game.set_state(GameState::Playing);
         }
 
-        prev_keys = {e_now, d_now, w_now, s_now, q_now, a_now, space_now, f_now, p_now};
+        static bool prev_c = false;
+        if (!io.WantCaptureKeyboard && viewport_hot && c_now && !prev_c && game.state() == GameState::Playing)
+        {
+            game.hold_active();
+        }
+        prev_c = c_now;
+        game.set_soft_drop(!io.WantCaptureKeyboard && v_now && game.state() == GameState::Playing);
+
+        prev_keys = {rot_xp_now, rot_xn_now, rot_zp_now, rot_zn_now, rot_yp_now, rot_yn_now, space_now, f_now, p_now};
 
         game.update(dt);
         {
@@ -761,7 +411,7 @@ int main()
         if (auto_play.plan.empty())
         {
             GameAi ai;
-            auto_play.plan = ai.compute_plan(game);
+            auto_play.plan = ai.compute_plan(game, config.ai);
             auto_play.plan_idx = 0;
             auto_play.steps = 0;
             auto_play.plan_piece_top_y = game.active_piece()->pos_y;
@@ -901,40 +551,18 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
                 Mat4 proj = perspective(60.0f, aspect, 0.1f, 100.0f);
                 Mat4 mvp_world = multiply(proj, view);
 
-                // Block shader setup (called before any block draw).
                 auto setup_block_shader = [&]() {
-                    glUseProgram(block_shader.program);
-                    glUniform1f(block_shader.u_time, app_time);
-                    glUniform3f(block_shader.u_light0_pos,       lx0, ly0, lz0);
-                    glUniform3f(block_shader.u_light0_color,     0.298f, 0.788f, 0.941f);
-                    glUniform1f(block_shader.u_light0_intensity, li0);
-                    glUniform3f(block_shader.u_light1_pos,       lx1, ly1, lz1);
-                    glUniform3f(block_shader.u_light1_color,     0.969f, 0.145f, 0.522f);
-                    glUniform1f(block_shader.u_light1_intensity, li1);
-                    glUniform3f(block_shader.u_light2_pos,       0.0f, 1.0f, 3.0f);
-                    glUniform3f(block_shader.u_light2_color,     0.443f, 0.035f, 0.718f);
-                    glUniform1f(block_shader.u_light2_intensity, 2.0f);
+                    gfx::setup_block_shader(block_shader, app_time, lx0, ly0, lz0, li0, lx1, ly1, lz1, li1);
                 };
 
                 auto draw_block = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha, float emissive) {
                     Mat4 mvp = multiply(mvp_world, model);
-                    glUniformMatrix4fv(block_shader.u_mvp,   1, GL_FALSE, mvp.m.data());
-                    glUniformMatrix4fv(block_shader.u_model, 1, GL_FALSE, model.m.data());
-                    glUniform3f(block_shader.u_tint,   tint.x, tint.y, tint.z);
-                    glUniform1f(block_shader.u_alpha,   alpha);
-                    glUniform1f(block_shader.u_emissive, emissive);
-                    glBindVertexArray(mesh.vao);
-                    glDrawArrays(mesh.mode, 0, mesh.count);
+                    gfx::draw_block(mesh, block_shader, mvp, model, tint, alpha, emissive);
                 };
 
                 auto draw_flat = [&](const GlMesh& mesh, const Mat4& model, const Vec3& tint, float alpha) {
                     Mat4 mvp = multiply(mvp_world, model);
-                    Vec3 t{std::clamp(tint.x, 0.f,1.f), std::clamp(tint.y, 0.f,1.f), std::clamp(tint.z, 0.f,1.f)};
-                    glUniformMatrix4fv(shader.u_mvp, 1, GL_FALSE, mvp.m.data());
-                    glUniform3f(shader.u_tint, t.x, t.y, t.z);
-                    glUniform1f(shader.u_alpha, alpha);
-                    glBindVertexArray(mesh.vao);
-                    glDrawArrays(mesh.mode, 0, mesh.count);
+                    gfx::draw_flat(mesh, shader, mvp, tint, alpha);
                 };
 
                 // --- Floor plane first (depth set here; grid lines at y=0 draw on top) ---
@@ -1309,181 +937,35 @@ ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
         }
         ImGui::End();
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.04f, 0.10f, 0.92f));
-        if (ImGui::Begin("Controls"))
-        {
-            // Next piece preview (2D isometric projection).
-            if (const auto& np = game.next_piece())
-            {
-                ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "NEXT");
-                ImVec2 canvas = ImGui::GetCursorScreenPos();
-                float step = 13.f;
-                float cx = canvas.x + 55.f;
-                float cy = canvas.y + 40.f;
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                for (const auto& b : np->blocks)
-                {
-                    Vec3i rb = apply_rot(np->rot, b);
-                    float ix = static_cast<float>(rb.x - rb.z) * step;
-                    float iy = (static_cast<float>(rb.x + rb.z) * 0.5f - static_cast<float>(rb.y)) * step;
-                    float x0 = cx + ix - step * 0.45f;
-                    float y0 = cy + iy - step * 0.45f;
-                    float x1 = cx + ix + step * 0.45f;
-                    float y1 = cy + iy + step * 0.45f;
-                    ImU32 col = IM_COL32(
-                        static_cast<int>(np->color.x * 255),
-                        static_cast<int>(np->color.y * 255),
-                        static_cast<int>(np->color.z * 255), 230);
-                    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), col, 2.f);
-                    dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1),
-                                IM_COL32(200, 230, 255, 120), 2.f, 0, 1.2f);
-                }
-                ImGui::Dummy(ImVec2(110.f, 80.f));
-            }
-            ImGui::Separator();
-            ImGui::TextUnformatted("Render");
-            ImGui::Checkbox("Wireframe active piece (F)", &wireframe_active);
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "SCORE  %d", game.score());
-            ImGui::Text("Level:  %d", game.level());
-            ImGui::Text("Lines:  %d", game.total_cleared());
-            ImGui::Text("Last clear: %d", game.last_cleared());
-            ImGui::Text("Fall speed: %.2f /s", game.fall_speed());
-            ImGui::Separator();
-            ImGui::TextUnformatted("Well size");
-            ImGui::SliderInt("Width", &desired_width, 3, 7);
-            desired_width = clamp_width_depth(desired_width);
-            ImGui::SliderInt("Depth", &desired_depth, 3, 7);
-            desired_depth = clamp_width_depth(desired_depth);
-            ImGui::SliderInt("Height", &desired_height, 5, 20);
-            bool size_changed = desired_width != well_width || desired_depth != well_depth || desired_height != well_height;
-            bool level_changed = desired_start_level != config.start_level;
-            ImGui::SliderInt("Start level", &desired_start_level, 0, 9);
-            if (ImGui::Button("Apply size") && size_changed)
-            {
-                well_width = desired_width;
-                well_depth = desired_depth;
-                well_height = desired_height;
-                config.start_level = desired_start_level;
-                destroy_mesh(floor_mesh);
-                destroy_mesh(walls_mesh);
-                destroy_mesh(wall_grid_mesh);
-                destroy_mesh(bottom_mesh);
-                floor_mesh = make_mesh(build_floor_grid_lines(well_width, well_depth, cell_size), GL_LINES);
-                walls_mesh = make_mesh(build_well_outline_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
-                wall_grid_mesh = make_mesh(build_well_wall_grid_lines(well_width, well_depth, well_height, cell_size), GL_LINES);
-                destroy_mesh(iso_walls_mesh);
-                iso_walls_mesh = make_mesh(build_well_outline_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
-                destroy_mesh(iso_wall_grid_mesh);
-                iso_wall_grid_mesh = make_mesh(build_well_wall_grid_lines_culled(well_width, well_depth, well_height, cell_size), GL_LINES);
-                bottom_mesh = make_mesh(build_bottom_plane(well_width, well_depth, cell_size), GL_TRIANGLES);
-                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
-                spin = {};
-                auto_play = {};
-                yaw = 0.0f;
-                pitch = to_radians(89.0f);
-                distance = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 2.4f);
-                needs_reframe = true;
-                iso_needs_reframe = true;
-                dist_iso = std::max(12.0f, static_cast<float>(std::max(well_width, well_depth)) * 3.0f);
-            }
-            if (ImGui::Button("Apply start level") && level_changed)
-            {
-                config.start_level = desired_start_level;
-                game = Game{well_width, well_depth, well_height, config.shapes, config.fall_interval, config.start_level};
-                spin = {};
-                auto_play = {};
-            }
-            ImGui::Separator();
-            ImGui::TextUnformatted("Controls");
-        ImGui::BulletText("Mouse drag: orbit (RMB drag to tilt)");
-        ImGui::BulletText("Mouse wheel: zoom");
-        ImGui::BulletText("Arrows: move");
-        ImGui::BulletText("E/D: rotate X, W/S: rotate Z, Q/A: rotate Y");
-        ImGui::BulletText("Space: hard drop");
-        ImGui::BulletText("F: toggle wireframe");
-        ImGui::BulletText("P: pause / resume");
-        ImGui::BulletText("Esc: quit");
-            ImGui::Separator();
-            ImGui::Checkbox("Auto play", &auto_play.enabled);
-            ImGui::Text("Auto steps: %d", auto_play.steps);
-        }
-        ImGui::End();
-        ImGui::PopStyleColor();
+        ui::controls_panel(
+            game, config,
+            desired_width, desired_depth, desired_height, desired_start_level,
+            well_width, well_depth, well_height, cell_size,
+            wireframe_active, auto_play,
+            floor_mesh, walls_mesh, wall_grid_mesh, bottom_mesh,
+            iso_walls_mesh, iso_wall_grid_mesh,
+            yaw, pitch, distance, needs_reframe, iso_needs_reframe, dist_iso, spin);
 
-        // HUD overlay on main viewport (B6).
         if (game.state() == GameState::Playing || game.state() == GameState::Paused)
-        {
-            ImGui::SetNextWindowPos(ImVec2(viewport_rect.x0 + 14.f, viewport_rect.y0 + 14.f), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.0f);
-            ImGuiWindowFlags hud_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
-                                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                                         ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBackground |
-                                         ImGuiWindowFlags_NoFocusOnAppearing;
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.15f, 0.85f, 1.0f, 0.90f));
-            if (ImGui::Begin("##hud", nullptr, hud_flags))
-            {
-                ImGui::Text("SCORE  %d", game.score());
-                ImGui::Text("LEVEL  %d", game.level());
-                ImGui::Text("LINES  %d", game.total_cleared());
-            }
-            ImGui::End();
-            ImGui::PopStyleColor();
-        }
+            ui::hud_overlay(game, viewport_rect.x0, viewport_rect.y0);
 
-        // Game Over overlay
         if (game.state() == GameState::GameOver)
         {
-            ImGuiIO& overlay_io = ImGui::GetIO();
-            ImVec2 center{overlay_io.DisplaySize.x * 0.5f * 0.68f,
-                          overlay_io.DisplaySize.y * 0.5f};
-            ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(320, 200), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.88f);
-            ImGuiWindowFlags ov_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
-            if (ImGui::Begin("##gameover", nullptr, ov_flags))
+            bool auto_play_reset = false;
+            bool palm_reset = false;
+            bool score_saved = true;
+            ui::game_over_overlay(game, high_score, auto_play_reset, palm_reset, score_saved);
+            if (!score_saved && high_score > 0)
             {
-                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("GAME OVER").x) * 0.5f);
-                ImGui::TextColored(ImVec4(1.f, 0.25f, 0.25f, 1.f), "GAME OVER");
-                ImGui::Separator();
-                ImGui::Text("Score:  %d", game.score());
-                ImGui::Text("Level:  %d", game.level());
-                ImGui::Text("Lines:  %d", game.total_cleared());
-                ImGui::Spacing();
-                float btn_w = 120.f;
-                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - btn_w) * 0.5f);
-                if (ImGui::Button("Restart", ImVec2(btn_w, 0)))
-                {
-                    game.restart();
-                    auto_play = {};
-                    spin = {};
-                }
+                save_high_score("highscore.txt", high_score);
+                score_saved = true;
             }
-            ImGui::End();
+            if (auto_play_reset) auto_play = {};
+            if (palm_reset) spin = {};
         }
 
-        // Paused overlay
         if (game.state() == GameState::Paused)
-        {
-            ImGuiIO& overlay_io = ImGui::GetIO();
-            ImVec2 center{overlay_io.DisplaySize.x * 0.5f * 0.68f,
-                          overlay_io.DisplaySize.y * 0.5f};
-            ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowSize(ImVec2(240, 100), ImGuiCond_Always);
-            ImGui::SetNextWindowBgAlpha(0.80f);
-            ImGuiWindowFlags ov_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking;
-            if (ImGui::Begin("##paused", nullptr, ov_flags))
-            {
-                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("PAUSED").x) * 0.5f);
-                ImGui::TextColored(ImVec4(1.f, 0.85f, 0.2f, 1.f), "PAUSED");
-                ImGui::Spacing();
-                ImGui::SetCursorPosX((ImGui::GetWindowWidth() - ImGui::CalcTextSize("Press P to resume").x) * 0.5f);
-                ImGui::TextDisabled("Press P to resume");
-            }
-            ImGui::End();
-        }
+            ui::paused_overlay();
 
         ImGui::Render();
         int fb_width = 1;

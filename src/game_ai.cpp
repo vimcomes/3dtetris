@@ -1,4 +1,5 @@
 #include "game_ai.h"
+#include "rotation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,29 +13,6 @@ namespace
 int idx3(int x, int y, int z, int w, int d)
 {
     return y * d * w + z * w + x;
-}
-
-// Mirror of game.cpp rotation matrices (must stay in sync).
-const int ROT_X_POS[3][3] = {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}};
-const int ROT_Y_POS[3][3] = {{0, 0, 1}, {0, 1, 0}, {-1, 0, 0}};
-const int ROT_Z_POS[3][3] = {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}};
-
-void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
-{
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-        {
-            int v = 0;
-            for (int k = 0; k < 3; ++k) v += A[i][k] * B[k][j];
-            out[i][j] = (v > 0) ? 1 : (v < 0) ? -1 : 0;
-        }
-}
-
-void apply_rot_step(int mat[3][3], const int rot[3][3])
-{
-    int tmp[3][3];
-    mul_rot(mat, rot, tmp);
-    std::memcpy(mat, tmp, sizeof(tmp));
 }
 
 bool mat_equal(const int A[3][3], const int B[3][3])
@@ -136,7 +114,7 @@ int clear_planes_occ(std::vector<uint8_t>& occ, int w, int d, int h)
 }
 
 // Heuristic on a post-clear occ (lower = better).
-float eval_occ(const std::vector<uint8_t>& occ, int w, int d, int h)
+float eval_occ(const std::vector<uint8_t>& occ, int w, int d, int h, const AiConfig& cfg)
 {
     int max_height = 0, holes = 0, agg_height = 0, bumpiness = 0;
     std::vector<int> heights(w * d, 0);
@@ -170,7 +148,8 @@ float eval_occ(const std::vector<uint8_t>& occ, int w, int d, int h)
             if (x + 1 < w) bumpiness += std::abs(h0 - heights[z * w + (x + 1)]);
             if (z + 1 < d) bumpiness += std::abs(h0 - heights[(z + 1) * w + x]);
         }
-    return max_height * 5.0f + agg_height * 0.5f + holes * 50.0f + bumpiness * 3.0f;
+    return max_height * cfg.weight_max_height + agg_height * cfg.weight_agg_height
+         + holes * cfg.weight_holes + bumpiness * cfg.weight_bumpiness;
 }
 
 struct BlockBounds { int minx, maxx, miny, maxy, minz, maxz; };
@@ -313,7 +292,7 @@ Piece GameAi::drop_piece(const Game& game, Piece p)
     return p;
 }
 
-std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
+std::vector<AiPlanStep> GameAi::compute_plan(const Game& game, const AiConfig& ai_cfg)
 {
     if (!game.active_piece()) return {};
     const Piece& active  = *game.active_piece();
@@ -367,7 +346,7 @@ std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
                         std::vector<uint8_t> occ2 = occ1;
                         place_piece_occ(occ2, w, d, h, next_opt->blocks, orient2.mat, pos2);
                         clear_planes_occ(occ2, w, d, h);
-                        float s = eval_occ(occ2, w, d, h);
+                        float s = eval_occ(occ2, w, d, h, ai_cfg);
                         if (s < best_next) best_next = s;
                     }
                 }
@@ -376,7 +355,7 @@ std::vector<AiPlanStep> GameAi::compute_plan(const Game& game)
             }
             else
             {
-                score = eval_occ(occ1, w, d, h);
+                score = eval_occ(occ1, w, d, h, ai_cfg);
             }
 
             candidates.push_back({oi, pos, score});

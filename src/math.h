@@ -18,6 +18,11 @@ struct Vec3i
     int z;
 };
 
+inline Vec3i operator+(const Vec3i& a, const Vec3i& b)
+{
+    return {a.x + b.x, a.y + b.y, a.z + b.z};
+}
+
 struct Mat4
 {
     std::array<float, 16> m{};

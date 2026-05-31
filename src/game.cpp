@@ -1,4 +1,5 @@
 #include "game.h"
+#include "rotation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +14,6 @@ int index3(int x, int y, int z, int w, int d)
 
 Vec3i rotate_block(const Vec3i& v, Axis axis, int dir)
 {
-    // dir: +1 clockwise (looking from positive axis), -1 counter-clockwise.
     int r = (dir >= 0) ? 1 : -1;
     switch (axis)
     {
@@ -22,63 +22,6 @@ Vec3i rotate_block(const Vec3i& v, Axis axis, int dir)
     case Axis::Z: return Vec3i{r * -v.y, r * v.x, v.z};
     }
     return v;
-}
-
-const int ROT_X_POS[3][3] = {
-    {1, 0, 0},
-    {0, 0, -1},
-    {0, 1, 0},
-};
-const int ROT_X_NEG[3][3] = {
-    {1, 0, 0},
-    {0, 0, 1},
-    {0, -1, 0},
-};
-const int ROT_Y_POS[3][3] = {
-    {0, 0, 1},
-    {0, 1, 0},
-    {-1, 0, 0},
-};
-const int ROT_Y_NEG[3][3] = {
-    {0, 0, -1},
-    {0, 1, 0},
-    {1, 0, 0},
-};
-const int ROT_Z_POS[3][3] = {
-    {0, -1, 0},
-    {1, 0, 0},
-    {0, 0, 1},
-};
-const int ROT_Z_NEG[3][3] = {
-    {0, 1, 0},
-    {-1, 0, 0},
-    {0, 0, 1},
-};
-
-void mul_rot(const int A[3][3], const int B[3][3], int out[3][3])
-{
-    for (int i = 0; i < 3; ++i)
-    {
-        for (int j = 0; j < 3; ++j)
-        {
-            int v = 0;
-            for (int k = 0; k < 3; ++k)
-            {
-                v += A[i][k] * B[k][j];
-            }
-            out[i][j] = v;
-        }
-    }
-    // Binarize to {-1,0,1} to avoid drift.
-    for (int i = 0; i < 3; ++i)
-    {
-        for (int j = 0; j < 3; ++j)
-        {
-            if (out[i][j] > 0) out[i][j] = 1;
-            else if (out[i][j] < 0) out[i][j] = -1;
-            else out[i][j] = 0;
-        }
-    }
 }
 
 ShapeBounds rotated_bounds(const std::vector<Vec3i>& blocks, const int rot[3][3])
@@ -171,9 +114,15 @@ Game::Game(int w, int d, int h, std::vector<ShapeDef> shapes, float fall_interva
     {
         // Fallback to built-in modern shapes if nothing was loaded.
         std::vector<Vec3> colors = {
-            Vec3{0.0f, 1.0f, 0.0f},  Vec3{1.0f, 0.0f, 0.0f},  Vec3{0.0f, 0.9f, 1.0f},
-            Vec3{0.0f, 0.0f, 1.0f},  Vec3{1.0f, 0.75f, 0.0f}, Vec3{1.0f, 0.0f, 0.8f},
-            Vec3{0.0f, 1.0f, 0.6f},  Vec3{0.9f, 0.9f, 0.9f}, Vec3{0.5f, 0.7f, 1.0f}};
+            Vec3{0.298f, 0.788f, 0.941f},
+            Vec3{0.969f, 0.145f, 0.522f},
+            Vec3{0.443f, 0.035f, 0.718f},
+            Vec3{0.263f, 0.380f, 0.933f},
+            Vec3{0.024f, 0.839f, 0.627f},
+            Vec3{0.969f, 0.498f, 0.000f},
+            Vec3{0.659f, 0.333f, 0.969f},
+            Vec3{0.298f, 0.788f, 0.941f},
+            Vec3{0.969f, 0.145f, 0.522f}};
         shapes = {
             {{Vec3i{0, 0, 0}, Vec3i{1, 0, 0}, Vec3i{-1, 0, 0}, Vec3i{2, 0, 0}}, colors[0]},
             {{
@@ -241,7 +190,7 @@ Piece Game::draw_from_bag()
     p.rot[0][0] = 1; p.rot[0][1] = 0; p.rot[0][2] = 0;
     p.rot[1][0] = 0; p.rot[1][1] = 1; p.rot[1][2] = 0;
     p.rot[2][0] = 0; p.rot[2][1] = 0; p.rot[2][2] = 1;
-    p.color = k_piece_palette[shape % 7];
+    p.color = shapes_[shape].color;
 
     const auto& b = bounds_[shape];
     int shape_w = b.max_x - b.min_x + 1;
@@ -320,6 +269,7 @@ void Game::try_lock_and_spawn()
     const float move_score = (level_factor_ * time_now * 200.0f * clear_bonus * fall_speed) / free_height;
     score_ += static_cast<int>(move_score + 0.5f);
     active_ = spawn_piece();
+    can_hold_ = true;
     fall_timer_ = 0.0f;
     piece_timer_ = 0.0f;
     drop_target_.reset();
@@ -420,6 +370,7 @@ void Game::rebuild_locked_cache()
     }
 }
 
+#ifdef DEBUG_TOOLS
 void Game::debug_fill_plane(int y, const Vec3& color)
 {
     if (y < 0 || y >= well_.height()) return;
@@ -432,6 +383,7 @@ void Game::debug_fill_plane(int y, const Vec3& color)
     }
     rebuild_locked_cache();
 }
+#endif
 
 std::vector<int> Game::filled_planes() const
 {
@@ -484,6 +436,10 @@ void Game::update(float dt)
     piece_timer_ += dt;
 
     float fall_speed = fall_interval_ > 0.0f ? (1.0f / fall_interval_) : 0.0f;
+    if (soft_dropping_)
+    {
+        fall_speed *= 5.0f;
+    }
     if (drop_target_)
     {
         fall_speed = std::max(fall_speed * 6.0f, fall_speed + 3.0f);
@@ -665,6 +621,43 @@ bool Game::hard_drop()
         }
     }
     drop_target_ = dropped.pos.y;
+    return true;
+}
+
+bool Game::hold_active()
+{
+    if (!active_ || !can_hold_)
+    {
+        return false;
+    }
+    Piece cur = *active_;
+    cur.pos.y = 0;
+    cur.pos_y = 0.0f;
+    if (held_piece_)
+    {
+        Piece h = *held_piece_;
+        h.pos = cur.pos;
+        h.pos_y = static_cast<float>(cur.pos.y);
+        // Reset rotation for the swapped-in piece.
+        h.rot[0][0] = 1; h.rot[0][1] = 0; h.rot[0][2] = 0;
+        h.rot[1][0] = 0; h.rot[1][1] = 1; h.rot[1][2] = 0;
+        h.rot[2][0] = 0; h.rot[2][1] = 0; h.rot[2][2] = 1;
+        if (!can_place(h))
+        {
+            return false;
+        }
+        held_piece_ = cur;
+        active_ = h;
+    }
+    else
+    {
+        held_piece_ = cur;
+        active_ = spawn_piece();
+    }
+    can_hold_ = false;
+    drop_target_.reset();
+    fall_timer_ = 0.0f;
+    piece_timer_ = 0.0f;
     return true;
 }
 

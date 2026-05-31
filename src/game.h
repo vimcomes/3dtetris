@@ -6,19 +6,9 @@
 
 #include "config.h"
 #include "math.h"
+#include "rotation.h"
 
 enum class GameState { Playing, Paused, GameOver };
-
-// Glassmorphism palette — indexed by (shape % 7).
-inline const Vec3 k_piece_palette[7] = {
-    {0.298f, 0.788f, 0.941f},  // #4CC9F0 cyan
-    {0.969f, 0.145f, 0.522f},  // #F72585 hot pink
-    {0.443f, 0.035f, 0.718f},  // #7209B7 purple
-    {0.263f, 0.380f, 0.933f},  // #4361EE electric blue
-    {0.024f, 0.839f, 0.627f},  // #06D6A0 teal
-    {0.969f, 0.498f, 0.000f},  // #F77F00 orange
-    {0.659f, 0.333f, 0.969f},  // #A855F7 violet
-};
 
 enum class Axis
 {
@@ -42,15 +32,6 @@ struct Piece
     int rot[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     Vec3 color{0.9f, 0.8f, 0.35f};
 };
-
-inline Vec3i apply_rot(const int R[3][3], const Vec3i& v)
-{
-    return Vec3i{
-        R[0][0] * v.x + R[0][1] * v.y + R[0][2] * v.z,
-        R[1][0] * v.x + R[1][1] * v.y + R[1][2] * v.z,
-        R[2][0] * v.x + R[2][1] * v.y + R[2][2] * v.z,
-    };
-}
 
 struct ShapeBounds
 {
@@ -91,12 +72,16 @@ public:
     bool rotate_active(Axis axis, int dir);
     void move_active(int dx, int dz);
     bool hard_drop();
+    bool hold_active();
+    void set_soft_drop(bool v) { soft_dropping_ = v; }
     [[nodiscard]] std::optional<Piece> ghost_piece() const;
     [[nodiscard]] float fall_progress() const;
     [[nodiscard]] bool active_can_fall() const;
     int clear_full_planes();
     int clear_full_planes_range(int min_y, int max_y);
+#ifdef DEBUG_TOOLS
     void debug_fill_plane(int y, const Vec3& color);
+#endif
     void rebuild_locked_cache();
     [[nodiscard]] std::vector<int> filled_planes() const;
     bool can_place_public(const Piece& p) const { return can_place(p); }
@@ -115,6 +100,9 @@ public:
 
     const Well& well() const { return well_; }
     const std::optional<Piece>& active_piece() const { return active_; }
+    const std::optional<Piece>& held_piece() const { return held_piece_; }
+    bool can_hold() const { return can_hold_; }
+    bool soft_dropping() const { return soft_dropping_; }
     const std::vector<Vec3i>& locked_cells() const { return locked_positions_; }
     const std::vector<Vec3>& locked_colors() const { return locked_colors_; }
 
@@ -139,6 +127,9 @@ private:
     float piece_timer_ = 0.0f;
     std::optional<int> drop_target_;
     std::optional<Piece> next_piece_;
+    std::optional<Piece> held_piece_;
+    bool can_hold_ = true;
+    bool soft_dropping_ = false;
     std::vector<int> bag_;
     std::mt19937 rng_;
 

@@ -2,7 +2,7 @@
 
 #include <glad/glad.h>
 
-#include "math.h"
+#include "palette.h"
 
 struct RenderShader
 {
@@ -35,15 +35,6 @@ struct GradientShader
     GLuint vbo = 0;
     GLint u_bottom = -1;
     GLint u_top = -1;
-};
-
-struct RenderPalette
-{
-    Vec3 clear{0.024f, 0.012f, 0.059f};   // #06030F near-black navy
-    Vec3 grid{1.0f, 1.0f, 1.0f};          // white (alpha controlled at draw time)
-    Vec3 outline{0.92f, 0.95f, 0.98f};
-    Vec3 grad_bottom{0.06f, 0.02f, 0.14f};
-    Vec3 grad_top{0.02f, 0.01f, 0.06f};
 };
 
 RenderShader create_render_shader();

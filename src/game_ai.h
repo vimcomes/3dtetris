@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "config.h"
 #include "game.h"
 
 struct AiPlanStep
@@ -14,7 +15,7 @@ struct AiPlanStep
 class GameAi
 {
 public:
-    std::vector<AiPlanStep> compute_plan(const Game& game);
+    std::vector<AiPlanStep> compute_plan(const Game& game, const AiConfig& ai_cfg = {});
 
 private:
     static bool can_place(const Game& game, const Piece& p);

@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(FetchContent)
-set(FETCHCONTENT_FULLY_DISCONNECTED TRUE CACHE BOOL "" FORCE)
+set(FETCHCONTENT_FULLY_DISCONNECTED TRUE CACHE BOOL "")
 
 # GLFW build tweaks to avoid extra artifacts we do not need.
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -41,7 +41,14 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(glfw glad)
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.7.0
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(glfw glad catch2)
 
 FetchContent_GetProperties(imgui)
 if (NOT imgui_POPULATED)
@@ -60,8 +67,30 @@ if (NOT imgui_POPULATED)
     target_link_libraries(imgui PUBLIC glfw)
 endif()
 
-file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS src/*.cpp src/*.h)
-add_executable(3dtetris ${SRC_FILES})
+# Core library — pure game logic, no OpenGL dependency.
+add_library(tetris_core STATIC
+    src/config.cpp
+    src/game.cpp
+    src/game_ai.cpp
+)
+target_include_directories(tetris_core PUBLIC src)
+
+# Main executable — OpenGL rendering, input, UI.
+add_executable(3dtetris
+    src/app.cpp
+    src/render.cpp
+    src/input.cpp
+    src/scores.cpp
+    src/ui/hud.cpp
+    src/ui/panels.cpp
+    src/gfx/mesh.cpp
+    src/gfx/renderer.cpp
+)
 target_compile_definitions(3dtetris PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(3dtetris PRIVATE src)
-target_link_libraries(3dtetris PRIVATE glfw glad imgui ${CMAKE_DL_LIBS})
+target_link_libraries(3dtetris PRIVATE tetris_core glfw glad imgui ${CMAKE_DL_LIBS})
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
