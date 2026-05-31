@@ -68,6 +68,8 @@ CLion users: open the repo root, select the `Debug` preset, build and run.
 | W / S | Rotate around Z |
 | Q / A | Rotate around Y |
 | Space | Hard drop |
+| V | Soft drop (hold) |
+| C | Hold piece (swap with held) |
 | P | Pause / resume |
 | F | Toggle wireframe on active piece |
 | LMB drag | Orbit main camera (yaw) |
@@ -97,9 +99,21 @@ config.toml            — runtime configuration
 `config.toml` controls everything without recompiling:
 
 ```toml
-[preset]
-name = "blockout"       # "modern" | "blockout"
-blockout_set = "basic"  # "basic" | "advanced" | "expert"
+[render.palette]
+clear   = [0.024, 0.012, 0.059]
+grid    = [1.0, 1.0, 1.0]
+outline = [0.92, 0.95, 0.98]
+
+[shapes]
+I    = [0.298, 0.788, 0.941]
+O    = [0.969, 0.145, 0.522]
+T    = [0.443, 0.035, 0.718]
+L    = [0.263, 0.380, 0.933]
+J    = [0.024, 0.839, 0.627]
+S    = [0.969, 0.498, 0.000]
+Z    = [0.659, 0.333, 0.969]
+Dot  = [0.298, 0.788, 0.941]
+Bar2 = [0.969, 0.145, 0.522]
 
 [well]
 width  = 6
@@ -107,13 +121,12 @@ depth  = 6
 height = 20
 
 [gameplay]
-fall_interval = 6.2     # seconds per cell at level 0
-start_level   = 2
+fall_interval = 1.2
+start_level   = 0
 
-[render.palette]
-clear   = [0.03, 0.02, 0.08]
-grid    = [0.10, 0.28, 0.45]
-outline = [0.55, 0.65, 0.75]
+[preset]
+name = "blockout"       # "modern" | "blockout"
+blockout_set = "basic"  # "basic" | "advanced" | "expert"
 ```
 
 ## AI planner
