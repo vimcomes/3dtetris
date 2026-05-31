@@ -14,7 +14,7 @@ Reworked the entire rendering pipeline into a **glassmorphism / synthwave** styl
 - **Phong shading with 3 dynamic coloured lights** — cyan, hot-pink, and purple point lights orbit the well at runtime, lighting each face according to its outward normal.
 - **Emissive breathing pulse** — every block's emissive channel oscillates (`0.4 + sin(t×2) × 0.15`), giving the whole well a slow breathing glow.
 - **Bright wireframe edges** — each block's 12 box edges are drawn as separate GL_LINES at high emissive (2.5–3×), creating a neon-wire outline effect independent of the glass faces.
-- **7-colour neon palette** — active pieces cycle through cyan / hot-pink / purple / electric-blue / teal / orange / violet regardless of config shape colours.
+- **7-colour neon palette** — active pieces cycle through cyan / hot-pink / purple / electric-blue / teal / orange / violet per config shape colours.
 - **Visible floor plane** — a bright coloured quad closes the bottom of the well, with correct CCW winding so it survives backface culling when viewed from above.
 - **Gradient background** — deep navy-to-purple vertical gradient replaces the flat clear colour.
 - **BFS reachability + 1-piece lookahead AI** — the AI planner was upgraded to verify each candidate placement is reachable (BFS through all moves/rotations) and to score one piece ahead.
@@ -27,10 +27,12 @@ Reworked the entire rendering pipeline into a **glassmorphism / synthwave** styl
 - **Dual viewport** — main perspective view with orbit/zoom controls + a fixed isometric mini-view in the sidebar.
 - **AI auto-play** — brute-force planner enumerates all 24 orientations × every board position, scores each placement with a heuristic (holes, aggregate height, bumpiness, plane clears), and executes the best plan step by step.
 - **Glassmorphism visual style** — translucent glass blocks, Phong lighting with 3 orbiting coloured point lights, emissive breathing pulse, neon wireframe edges.
-- **HUD + next-piece preview** — score/level/lines overlay on the viewport, isometric next-piece preview in the sidebar.
+- **HUD + next-piece preview + held piece display** — score/level/lines overlay, isometric next-piece preview, held piece shown in sidebar.
 - **7-bag randomiser** — pieces are drawn from a shuffled bag of all shapes, guaranteeing even distribution.
 - **Game state machine** — Playing / Paused (P) / Game Over with restart, proper top-out detection.
-- **Configurable** — well dimensions (3–7 × 3–7 × 5–20), start level, fall speed, colour palette, shape set — all in `config.toml`.
+- **Hold piece + soft drop** — hold current piece (C) for later use; soft drop (V) for gradual speed-up.
+- **High scores** — best score persisted to `highscore.txt` next to the binary.
+- **Configurable** — well dimensions (3–7 × 3–7 × 5–20), start level, fall speed, colour palette, shape set, key bindings, AI weights — all in `config.toml`.
 
 ## Tech stack
 
@@ -81,16 +83,28 @@ CLion users: open the repo root, select the `Debug` preset, build and run.
 
 ```
 src/
-  app.cpp        — main loop, rendering, input, ImGui layout (~1500 lines)
+  app.cpp        — main loop, ownership, dispatch (~980 lines)
+  app_state.h    — shared state structs (SpinState, AutoPlayState, etc.)
   game.cpp/h     — game logic: well, piece physics, rotation, line clears
   game_ai.cpp/h  — AI planner: orientation enumeration, heuristic search
-  render.cpp/h   — GLSL shaders (geometry + gradient), palette
+  render.cpp/h   — GLSL shaders (geometry + gradient)
+  palette.h      — RenderPalette struct (no GL dependency)
   config.cpp/h   — TOML config loader, shape definitions
+  rotation.h     — rotation matrices + mul_rot/apply_rot (single source)
   geometry.h     — mesh builders: cubes, edges, floor grid, well walls
   math.h         — linear algebra (Vec3, Mat4, transforms)
   shader.h       — GLSL compile/link helpers
+  input.cpp/h    — GLFW init, callbacks, key-name resolver
+  scores.cpp/h   — high score persistence
+  gfx/
+    mesh.h/cpp       — GlMesh struct, mesh constructors, piece mesh/edges
+    renderer.h/cpp   — draw_block, draw_flat, setup_block_shader
+  ui/
+    hud.h/cpp        — ImGui init, HUD, GameOver, Paused overlays
+    panels.h/cpp     — dockspace layout, Controls panel
 data/
-  forms_blockout.dat  — Blockout shape definitions (centres + bitmaps)
+  forms_blockout.dat  — Blockout shape definitions
+  highscore.txt       — persisted best score
 config.toml            — runtime configuration
 ```
 
@@ -127,6 +141,29 @@ start_level   = 0
 [preset]
 name = "blockout"       # "modern" | "blockout"
 blockout_set = "basic"  # "basic" | "advanced" | "expert"
+
+[controls]
+move_left = "Left"
+move_right = "Right"
+move_forward = "Up"
+move_back = "Down"
+rot_x_pos = "E"
+rot_x_neg = "D"
+rot_z_pos = "W"
+rot_z_neg = "S"
+rot_y_pos = "Q"
+rot_y_neg = "A"
+hard_drop = "Space"
+soft_drop = "V"
+hold = "C"
+wireframe = "F"
+pause = "P"
+
+[ai]
+weight_max_height = 5.0
+weight_agg_height = 0.5
+weight_holes = 50.0
+weight_bumpiness = 3.0
 ```
 
 ## AI planner
@@ -135,10 +172,10 @@ The auto-play AI (`game_ai.cpp`) works as a one-ply search:
 
 1. Build a flat occupancy array from the current well state.
 2. For each of the 24 cube-rotation-group orientations × every (x, z) spawn position: drop the piece, simulate the resulting board.
-3. Score the board: `max_height × 5 + agg_height × 0.5 + holes × 50 + bumpiness × 3 − full_planes × 800`.
-4. Pick the minimum-score candidate. Emit rotation steps (matching the game's own rotation matrices) then translation steps then a hard-drop command.
+3. Score the board using heuristic weights from `config.toml` (`[ai]` section): `max_height × weight_max_height + agg_height × weight_agg_height + holes × weight_holes + bumpiness × weight_bumpiness`. 1-ply lookahead evaluates the next piece's best placement.
+4. Pick the minimum-score candidate. Emit rotation steps (matching `rotation.h` matrices) then translation steps then a hard-drop command.
 
-The rotation matrices in the AI mirror those in `game.cpp` exactly — same `ROT_X_POS / ROT_Y_POS / ROT_Z_POS` constants — so there is no plan/execution mismatch.
+The rotation matrices in `rotation.h` are a single shared source for both the game and the AI, eliminating plan/execution mismatch.
 
 ## License
 
